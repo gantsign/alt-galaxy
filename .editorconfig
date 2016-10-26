@@ -10,6 +10,10 @@ indent_style = space
 indent_size = 4
 trim_trailing_whitespace = true
 
+# Files with a smaller indent
+[*.yml]
+indent_size = 2
+
 # JSON config files
 [*.json]
 indent_style = tab
