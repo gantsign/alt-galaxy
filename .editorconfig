@@ -1,0 +1,19 @@
+# EditorConfig: http://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+# Defaults for all editor files
+[*]
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+# JSON config files
+[*.json]
+indent_style = tab
+
+# Go programming language
+[*.go]
+indent_style = tab
