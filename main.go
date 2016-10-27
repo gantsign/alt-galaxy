@@ -12,6 +12,7 @@ import (
 func main() {
 	app := cli.NewApp()
 	app.Usage = "Alternate implementation of ansible-galaxy tool for downloading Ansible roles."
+	app.HideHelp = true
 	app.Version = "0.9"
 
 	app.Commands = []cli.Command{
