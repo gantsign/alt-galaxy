@@ -9,11 +9,23 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
+var (
+	version  = "unknown"
+	revision = "unknown"
+	built    = "unknown"
+)
+
 func main() {
 	app := cli.NewApp()
 	app.Usage = "Alternate implementation of ansible-galaxy tool for downloading Ansible roles."
 	app.HideHelp = true
-	app.Version = "0.9"
+
+	app.Version = version
+	cli.VersionPrinter = func(c *cli.Context) {
+		fmt.Println("Version:  ", version)
+		fmt.Println("Revision: ", revision)
+		fmt.Println("Built:    ", built)
+	}
 
 	app.Commands = []cli.Command{
 		{
