@@ -3,7 +3,12 @@ language: go
 go:
   - '1.7.3'
 
-before_install:
+install:
+  # Install godep
+  - go get github.com/tools/godep
+  # Intall project dependencies using godep
+  - godep restore
+  # Install gox cross compile tool
   - go get github.com/mitchellh/gox
 
 script:
