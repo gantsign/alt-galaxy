@@ -3,6 +3,13 @@ language: go
 go:
   - '1.7.3'
 
+before_install:
+  - go get github.com/mitchellh/gox
+
+script:
+  - .travis/build.sh
+
 env:
   global:
-    - GOARCH=amd64
+    - OS_TARGETS="linux darwin windows"
+    - ARCH_TARGETS="386 amd64"
