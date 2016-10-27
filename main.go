@@ -42,6 +42,10 @@ func main() {
 					Name:  "roles-path",
 					Usage: "The path to the directory containing your roles. The default is the roles_path configured in your ansible.cfg file (/etc/ansible/roles if not configured",
 				},
+				cli.BoolFlag{
+					Name:  "force",
+					Usage: "Force overwriting an existing role",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				roleFile := c.String("role-file")
@@ -52,6 +56,10 @@ func main() {
 				rolesPath := c.String("roles-path")
 				if rolesPath == "" {
 					return errors.New("You must specify the roles path.")
+				}
+				force := c.Bool("force")
+				if !force {
+					return errors.New("This application requires --force to be set.\nWARNING: this will delete and replace your existing roles under the role path directory.")
 				}
 
 				cmd := roleinstaller.RoleInstallerCmd{

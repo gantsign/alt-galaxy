@@ -49,8 +49,14 @@ ERROR! Unexpected Exception: [Errno 104] Connection reset by peer
 
 ## Usage guide
 
+**WARNING:** this will delete and replace your existing roles under the role
+path directory.
+
 ```bash
-alt-galaxy install --role-file=/vagrant/provisioning/requirements.yml --roles-path=/etc/ansible/roles
+alt-galaxy install \
+    --role-file=/vagrant/provisioning/requirements.yml \
+    --roles-path=/etc/ansible/roles \
+    --force
 ```
 
 ## License
