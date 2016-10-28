@@ -59,7 +59,7 @@ appropriate):
 
 ```bash
 version=<version>
-arch=<368 or amd64>
+arch=<386 or amd64>
 curl --location https://github.com/gantsign/alt-galaxy/releases/download/${version}/alt-galaxy_linux_${arch}.tar.xz \
     | sudo tar --extract --xz --directory=/usr/local/bin
 ```
