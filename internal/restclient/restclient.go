@@ -13,11 +13,16 @@ type RestClient interface {
 
 type restClientImpl struct {
 	httpClient *http.Client
+	userAgent  string
 }
 
-func NewRestClient(httpClient *http.Client) (RestClient, error) {
+func NewRestClient(httpClient *http.Client, userAgent string) (RestClient, error) {
 	if httpClient == nil {
 		return nil, fmt.Errorf("Parameter [%s] is required.", "httpClient")
 	}
-	return &restClientImpl{httpClient: httpClient}, nil
+	restClient := &restClientImpl{
+		httpClient: httpClient,
+		userAgent:  userAgent,
+	}
+	return restClient, nil
 }
