@@ -47,6 +47,31 @@ ERROR! Unexpected Exception: [Errno 104] Connection reset by peer
 * Standalone, the application is written in [Go](https://golang.org/) and
   statically linked, so it has no dependencies other than the operating system.
 
+## Installation
+
+A binary package is provided for Linux x86-64; it can be installed with the
+following command:
+
+### Linux
+
+Run the following to install on Linux (change the version and architecture as
+appropriate):
+
+```bash
+version=<version>
+arch=<368 or amd64>
+curl --location https://github.com/gantsign/alt-galaxy/releases/download/${version}/alt-galaxy_linux_${arch}.tar.xz \
+    | sudo tar --extract --xz --directory=/usr/local/bin
+```
+
+### Other operating systems
+
+Download the appropriate archive from the
+[releases](https://github.com/gantsign/alt-galaxy/releases) page and
+untar/un7zip as appropriate.
+
+###
+
 ## Usage guide
 
 **WARNING:** this will delete and replace your existing roles under the role
