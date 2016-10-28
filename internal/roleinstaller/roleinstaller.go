@@ -208,14 +208,12 @@ func (cmd RoleInstallerCmd) Execute() error {
 	}
 
 	for _, role := range roles {
-		if strings.Contains(role.Src, "://") {
-			if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
-				role.Url = role.Src
-				installer.roleDownloadQueue <- role
-			} else {
-				installer.roleLog(role).Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
-				installer.fail(role)
-			}
+		if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
+			role.Url = role.Src
+			installer.roleDownloadQueue <- role
+		} else if strings.Contains(role.Src, "://") {
+			installer.roleLog(role).Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
+			installer.fail(role)
 		} else {
 			role.Name = role.Src
 			installer.roleLookupQueue <- role
