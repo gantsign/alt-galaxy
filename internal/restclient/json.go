@@ -11,7 +11,10 @@ func (restClient *restClientImpl) JsonHttpGet(url string) (*http.Response, []byt
 	if err != nil {
 		return nil, nil, fmt.Errorf("Invalid URL [%s].\nCaused by: %s", url, err)
 	}
+
+	req.Header.Add("User-Agent", restClient.userAgent)
 	req.Header.Add("Accept", "application/json")
+
 	resp, err := restClient.httpClient.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GET request to URL [%s] failed.\nCaused by: %s", url, err)

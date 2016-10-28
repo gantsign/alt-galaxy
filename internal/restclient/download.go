@@ -3,6 +3,7 @@ package restclient
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,7 +31,13 @@ func (restClient restClientImpl) DownloadUrl(url string, destFilePath string) (s
 	}
 	defer destFile.Close()
 
-	resp, err := restClient.httpClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("Invalid URL [%s].\nCaused by: %s", url, err)
+	}
+	req.Header.Add("User-Agent", restClient.userAgent)
+
+	resp, err := restClient.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("Failed sending GET request to URL [%s].\nCaused by: %s", url, err)
 	}

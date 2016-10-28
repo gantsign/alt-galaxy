@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gantsign/alt-galaxy/internal/application"
 	"github.com/gantsign/alt-galaxy/internal/message"
 	"github.com/gantsign/alt-galaxy/internal/restapi"
 	"github.com/gantsign/alt-galaxy/internal/restclient"
@@ -170,7 +171,8 @@ func (cmd RoleInstallerCmd) Execute() error {
 	}
 
 	httpClient := &http.Client{}
-	restClient, err := restclient.NewRestClient(httpClient)
+	userAgent := fmt.Sprintf("%s/%s (+%s)", application.Name, application.Version, application.Repository)
+	restClient, err := restclient.NewRestClient(httpClient, userAgent)
 	if err != nil {
 		return fmt.Errorf("Failed to create REST client.\nCaused by: %s", err)
 	}
