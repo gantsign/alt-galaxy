@@ -1,7 +1,7 @@
 package application
 
 var (
-	Version  = "unknown"
+	Version  = "dev"
 	Revision = "unknown"
 	Built    = "unknown"
 )
