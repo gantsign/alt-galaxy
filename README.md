@@ -49,9 +49,6 @@ ERROR! Unexpected Exception: [Errno 104] Connection reset by peer
 
 ## Installation
 
-A binary package is provided for Linux x86-64; it can be installed with the
-following command:
-
 ### Linux
 
 Run the following to install on Linux (change the version and architecture as
