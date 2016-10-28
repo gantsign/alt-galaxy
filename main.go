@@ -5,14 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/gantsign/alt-galaxy/internal/application"
 	"github.com/gantsign/alt-galaxy/internal/roleinstaller"
 	"gopkg.in/urfave/cli.v1"
-)
-
-var (
-	version  = "unknown"
-	revision = "unknown"
-	built    = "unknown"
 )
 
 func main() {
@@ -20,11 +15,11 @@ func main() {
 	app.Usage = "Alternate implementation of ansible-galaxy tool for downloading Ansible roles."
 	app.HideHelp = true
 
-	app.Version = version
+	app.Version = application.Version
 	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Println("Version:  ", version)
-		fmt.Println("Revision: ", revision)
-		fmt.Println("Built:    ", built)
+		fmt.Println("Version:  ", application.Version)
+		fmt.Println("Revision: ", application.Revision)
+		fmt.Println("Built:    ", application.Built)
 	}
 
 	app.Commands = []cli.Command{

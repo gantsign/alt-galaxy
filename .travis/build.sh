@@ -8,9 +8,9 @@ echo '# Building binaries #'
 echo '#####################'
 echo
 
-gox -ldflags="-X main.version=${TRAVIS_TAG:-unknown} \
-              -X main.revision=${TRAVIS_COMMIT:-unknown} \
-              -X main.built=$(date --iso-8601=seconds) \
+gox -ldflags="-X github.com/gantsign/alt-galaxy/internal/application.Version=${TRAVIS_TAG:-unknown} \
+              -X github.com/gantsign/alt-galaxy/internal/application.Revision=${TRAVIS_COMMIT:-unknown} \
+              -X github.com/gantsign/alt-galaxy/internal/application.Built=$(date --iso-8601=seconds) \
               -s" \
     -os="${OS_TARGETS:-linux darwin windows}" \
     -arch="${ARCH_TARGETS:-amd64}" \
