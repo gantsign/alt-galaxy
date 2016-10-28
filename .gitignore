@@ -261,3 +261,9 @@ _testmain.go
 
 # external packages folder
 vendor/
+
+
+### Application specific ###
+
+/alt-galaxy
+/debug
