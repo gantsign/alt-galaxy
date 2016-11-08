@@ -27,12 +27,12 @@ const (
 
 type additionalRoleFields struct {
 	Url         string
-	Index       int
 	ArchivePath string
 }
 
 type installerRole struct {
 	rolesfile.Role
+	roleLog
 	additionalRoleFields
 }
 
@@ -41,19 +41,20 @@ type roleInstaller struct {
 	roleLookupQueue         chan installerRole
 	roleDownloadQueue       chan installerRole
 	roleUntarQueue          chan installerRole
-	roleOutputBuffers       []chan message.Message
+	roleOutputBuffers       chan chan message.Message
 	restClient              restclient.RestClient
 	restApi                 restapi.RestApi
 	galaxyRequestSemaphore  util.Semaphore
 	gitHubDownloadSemaphore util.Semaphore
 	untarSemaphore          util.Semaphore
-	completionLatch         util.CompletionLatch
+	roleLatch               util.CompletionLatch
+	loggingLatch            util.CompletionLatch
 }
 
 func (installer *roleInstaller) printOutput() {
 	stdOut := bufio.NewWriter(os.Stdout)
 	stdErr := bufio.NewWriter(os.Stderr)
-	for _, output := range installer.roleOutputBuffers {
+	for output := range installer.roleOutputBuffers {
 		for msg := range output {
 			switch msg.MessageType {
 			case message.OutMsg:
@@ -80,37 +81,35 @@ func (installer *roleInstaller) printOutput() {
 			}
 		}
 	}
-	installer.completionLatch.Success()
+	installer.loggingLatch.Success()
 }
 
 func (installer *roleInstaller) fail(role installerRole) {
-	installer.roleLog(role).Progressf("%s install failed", role.Name)
-	close(installer.roleOutputBuffers[role.Index])
-	installer.completionLatch.Failure()
+	role.Progressf("%s install failed", role.Name)
+	role.close()
+	installer.roleLatch.Failure()
 }
 
 func (installer *roleInstaller) success(role installerRole) {
-	installer.roleLog(role).Progressf("%s was installed successfully", role.Name)
-	close(installer.roleOutputBuffers[role.Index])
-	installer.completionLatch.Success()
+	role.Progressf("%s was installed successfully", role.Name)
+	role.close()
+	installer.roleLatch.Success()
 }
 
 func (installer *roleInstaller) lookupRole(role installerRole) {
-	log := installer.roleLog(role)
-
 	roleName, err := role.ParseRoleName()
 	if err != nil {
-		log.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
+		role.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
 		installer.galaxyRequestSemaphore.Release()
 		installer.fail(role)
 		return
 	}
 
-	log.Progressf("downloading role '%s', owned by %s", roleName.RoleNamePart, roleName.UsernamePart)
+	role.Progressf("downloading role '%s', owned by %s", roleName.RoleNamePart, roleName.UsernamePart)
 
 	roleQueryResponse, err := installer.restApi.QueryRolesByName(roleName)
 	if err != nil {
-		log.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
+		role.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
 		installer.galaxyRequestSemaphore.Release()
 		installer.fail(role)
 		return
@@ -135,14 +134,12 @@ func (installer *roleInstaller) lookupRoles() {
 }
 
 func (installer *roleInstaller) downloadRole(role installerRole) {
-	log := installer.roleLog(role)
-
 	destFilePath := path.Join(installer.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
 
-	log.Progressf("downloading role from %s", role.Url)
+	role.Progressf("downloading role from %s", role.Url)
 	destFilePath, err := installer.restClient.DownloadUrl(role.Url, destFilePath)
 	if err != nil {
-		log.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
+		role.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
 		installer.gitHubDownloadSemaphore.Release()
 		installer.fail(role)
 		return
@@ -163,15 +160,13 @@ func (installer *roleInstaller) downloadRoles() {
 }
 
 func (installer *roleInstaller) untarRole(role installerRole) {
-	log := installer.roleLog(role)
-
 	destDirPath := path.Join(installer.rolesPath, role.Name)
 
-	log.Progressf("extracting %s to %s", role.Name, destDirPath)
+	role.Progressf("extracting %s to %s", role.Name, destDirPath)
 
-	err := untar.Untar(log, role.ArchivePath, destDirPath)
+	err := untar.Untar(role, role.ArchivePath, destDirPath)
 	if err != nil {
-		log.Errorf("Failed to untar archive [%s].\nCaused by: %s", role.ArchivePath, err)
+		role.Errorf("Failed to untar archive [%s].\nCaused by: %s", role.ArchivePath, err)
 		installer.untarSemaphore.Release()
 		installer.fail(role)
 		return
@@ -215,16 +210,15 @@ func (cmd RoleInstallerCmd) Execute() error {
 	}
 
 	installer := &roleInstaller{
-		rolesPath:         cmd.RolesPath,
-		restClient:        restClient,
-		restApi:           restApi,
-		roleLookupQueue:   make(chan installerRole, len(roles)),
-		roleDownloadQueue: make(chan installerRole, len(roles)),
-		roleUntarQueue:    make(chan installerRole, len(roles)),
-		// Completion latch is one per role plus one for the output logger, this
-		// ensures all log output is written before we exit.
-		completionLatch:         util.NewCompletionLatch(len(roles) + 1),
-		roleOutputBuffers:       make([]chan message.Message, len(roles)),
+		rolesPath:               cmd.RolesPath,
+		restClient:              restClient,
+		restApi:                 restApi,
+		roleLookupQueue:         make(chan installerRole, len(roles)),
+		roleDownloadQueue:       make(chan installerRole, len(roles)),
+		roleUntarQueue:          make(chan installerRole, len(roles)),
+		roleLatch:               util.NewCompletionLatch(len(roles)),
+		loggingLatch:            util.NewCompletionLatch(1),
+		roleOutputBuffers:       make(chan chan message.Message, len(roles)),
 		galaxyRequestSemaphore:  util.NewSemaphore(maxConcurrentGalaxyRequests),
 		gitHubDownloadSemaphore: util.NewSemaphore(maxConcurrentGitHubDownloads),
 		untarSemaphore:          util.NewSemaphore(maxConcurrentUntar),
@@ -235,24 +229,29 @@ func (cmd RoleInstallerCmd) Execute() error {
 	go installer.downloadRoles()
 	go installer.untarRoles()
 
-	for index, fileRole := range roles {
-		role := installerRole{fileRole, additionalRoleFields{
-			Index: index,
-		}}
-		installer.roleOutputBuffers[index] = make(chan message.Message, 20)
+	for _, fileRole := range roles {
+		outputBuffer := make(chan message.Message, 20)
+		installer.roleOutputBuffers <- outputBuffer
+
+		role := installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
 
 		if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 			role.Url = role.Src
 			installer.roleDownloadQueue <- role
 		} else if strings.Contains(role.Src, "://") {
-			installer.roleLog(role).Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
+			role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
 			installer.fail(role)
 		} else {
 			role.Name = role.Src
 			installer.roleLookupQueue <- role
 		}
 	}
-	success := installer.completionLatch.Await()
+
+	success := installer.roleLatch.Await()
+
+	close(installer.roleOutputBuffers)
+	installer.loggingLatch.Await()
+
 	if !success {
 		return errors.New("Failed to complete successfully. Any error output should be visible above. Please fix these errors and try again.")
 	}
