@@ -1,8 +1,8 @@
 package message
 
 const (
-	OutMsg MessageType = iota
-	ErrorMsg
+	OutMsg   MessageType = iota
+	ErrorMsg MessageType = iota
 )
 
 type MessageType int

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gantsign/alt-galaxy/internal/application"
 	"github.com/gantsign/alt-galaxy/internal/roleinstaller"
@@ -69,6 +70,9 @@ func main() {
 
 	appError := app.Run(os.Args)
 	if appError != nil {
+		// A short sleep helps the stdout and stderr render in the correct order
+		time.Sleep(time.Second)
+
 		fmt.Fprintln(os.Stderr, appError)
 		os.Exit(1)
 	}
