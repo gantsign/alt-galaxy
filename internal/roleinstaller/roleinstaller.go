@@ -23,11 +23,22 @@ const (
 	maxConcurrentUntar           = 2
 )
 
+type additionalRoleFields struct {
+	Url         string
+	Index       int
+	ArchivePath string
+}
+
+type installerRole struct {
+	rolesfile.Role
+	additionalRoleFields
+}
+
 type roleInstaller struct {
 	rolesPath               string
-	roleLookupQueue         chan rolesfile.Role
-	roleDownloadQueue       chan rolesfile.Role
-	roleUntarQueue          chan rolesfile.Role
+	roleLookupQueue         chan installerRole
+	roleDownloadQueue       chan installerRole
+	roleUntarQueue          chan installerRole
 	roleOutputBuffers       []chan message.Message
 	restClient              restclient.RestClient
 	restApi                 restapi.RestApi
@@ -52,19 +63,19 @@ func (installer *roleInstaller) printOutput() {
 	}
 }
 
-func (installer *roleInstaller) fail(role rolesfile.Role) {
+func (installer *roleInstaller) fail(role installerRole) {
 	installer.roleLog(role).Progressf("%s install failed", role.Name)
 	close(installer.roleOutputBuffers[role.Index])
 	installer.completionLatch.Failure()
 }
 
-func (installer *roleInstaller) success(role rolesfile.Role) {
+func (installer *roleInstaller) success(role installerRole) {
 	installer.roleLog(role).Progressf("%s was installed successfully", role.Name)
 	close(installer.roleOutputBuffers[role.Index])
 	installer.completionLatch.Success()
 }
 
-func (installer *roleInstaller) lookupRole(role rolesfile.Role) {
+func (installer *roleInstaller) lookupRole(role installerRole) {
 	log := installer.roleLog(role)
 
 	roleName, err := role.ParseRoleName()
@@ -103,7 +114,7 @@ func (installer *roleInstaller) lookupRoles() {
 	}
 }
 
-func (installer *roleInstaller) downloadRole(role rolesfile.Role) {
+func (installer *roleInstaller) downloadRole(role installerRole) {
 	log := installer.roleLog(role)
 
 	destFilePath := path.Join(installer.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
@@ -131,7 +142,7 @@ func (installer *roleInstaller) downloadRoles() {
 	}
 }
 
-func (installer *roleInstaller) untarRole(role rolesfile.Role) {
+func (installer *roleInstaller) untarRole(role installerRole) {
 	log := installer.roleLog(role)
 
 	destDirPath := path.Join(installer.rolesPath, role.Name)
@@ -187,9 +198,9 @@ func (cmd RoleInstallerCmd) Execute() error {
 		rolesPath:               cmd.RolesPath,
 		restClient:              restClient,
 		restApi:                 restApi,
-		roleLookupQueue:         make(chan rolesfile.Role, len(roles)),
-		roleDownloadQueue:       make(chan rolesfile.Role, len(roles)),
-		roleUntarQueue:          make(chan rolesfile.Role, len(roles)),
+		roleLookupQueue:         make(chan installerRole, len(roles)),
+		roleDownloadQueue:       make(chan installerRole, len(roles)),
+		roleUntarQueue:          make(chan installerRole, len(roles)),
 		completionLatch:         util.NewCompletionLatch(len(roles)),
 		roleOutputBuffers:       make([]chan message.Message, len(roles)),
 		galaxyRequestSemaphore:  util.NewSemaphore(maxConcurrentGalaxyRequests),
@@ -202,12 +213,12 @@ func (cmd RoleInstallerCmd) Execute() error {
 	go installer.downloadRoles()
 	go installer.untarRoles()
 
-	for index := range roles {
-		roles[index].Index = index
+	for index, fileRole := range roles {
+		role := installerRole{fileRole, additionalRoleFields{
+			Index: index,
+		}}
 		installer.roleOutputBuffers[index] = make(chan message.Message, 20)
-	}
 
-	for _, role := range roles {
 		if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 			role.Url = role.Src
 			installer.roleDownloadQueue <- role

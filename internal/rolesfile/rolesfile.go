@@ -9,12 +9,9 @@ import (
 )
 
 type Role struct {
-	Src         string
-	Name        string `yaml:"name,omitempty"`
-	Version     string `yaml:"version,omitempty"`
-	Url         string
-	Index       int
-	ArchivePath string
+	Src     string
+	Name    string `yaml:"name,omitempty"`
+	Version string `yaml:"version,omitempty"`
 }
 
 func ParseRolesFile(filename string) ([]Role, error) {
