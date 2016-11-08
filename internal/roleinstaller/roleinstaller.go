@@ -61,6 +61,7 @@ func (installer *roleInstaller) printOutput() {
 			}
 		}
 	}
+	installer.completionLatch.Success()
 }
 
 func (installer *roleInstaller) fail(role installerRole) {
@@ -195,13 +196,15 @@ func (cmd RoleInstallerCmd) Execute() error {
 	}
 
 	installer := &roleInstaller{
-		rolesPath:               cmd.RolesPath,
-		restClient:              restClient,
-		restApi:                 restApi,
-		roleLookupQueue:         make(chan installerRole, len(roles)),
-		roleDownloadQueue:       make(chan installerRole, len(roles)),
-		roleUntarQueue:          make(chan installerRole, len(roles)),
-		completionLatch:         util.NewCompletionLatch(len(roles)),
+		rolesPath:         cmd.RolesPath,
+		restClient:        restClient,
+		restApi:           restApi,
+		roleLookupQueue:   make(chan installerRole, len(roles)),
+		roleDownloadQueue: make(chan installerRole, len(roles)),
+		roleUntarQueue:    make(chan installerRole, len(roles)),
+		// Completion latch is one per role plus one for the output logger, this
+		// ensures all log output is written before we exit.
+		completionLatch:         util.NewCompletionLatch(len(roles) + 1),
 		roleOutputBuffers:       make([]chan message.Message, len(roles)),
 		galaxyRequestSemaphore:  util.NewSemaphore(maxConcurrentGalaxyRequests),
 		gitHubDownloadSemaphore: util.NewSemaphore(maxConcurrentGitHubDownloads),
