@@ -6,6 +6,7 @@ import (
 )
 
 type CompletionLatch interface {
+	TaskAdded()
 	Success()
 	Failure()
 	Await() bool
@@ -30,6 +31,14 @@ func NewCompletionLatch(count int) CompletionLatch {
 	}
 	latch.completionLock.Lock()
 	return latch
+}
+
+func (latch completionLatchImpl) TaskAdded() {
+	latch.updateLock.Lock()
+
+	atomic.AddInt32(latch.remaining, 1)
+
+	latch.updateLock.Unlock()
 }
 
 func (latch completionLatchImpl) Success() {

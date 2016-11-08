@@ -30,6 +30,7 @@ ERROR! Unexpected Exception: [Errno 104] Connection reset by peer
 
 * Implements `ansible-galaxy install` command only.
 * Supports looking up the latest role version from Ansible Galaxy.
+* Supports role dependencies (remote dependencies only)
 * Efficient HTTP implementation, reuses HTTP connections.
 * Fast, roles are installed in parallel making this implementation much faster.
 
