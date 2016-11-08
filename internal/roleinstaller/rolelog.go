@@ -5,7 +5,6 @@ import (
 
 	"github.com/gantsign/alt-galaxy/internal/logging"
 	"github.com/gantsign/alt-galaxy/internal/message"
-	"github.com/gantsign/alt-galaxy/internal/rolesfile"
 )
 
 type roleLog struct {
@@ -13,7 +12,7 @@ type roleLog struct {
 	roleIndex int
 }
 
-func (installer *roleInstaller) roleLog(role rolesfile.Role) logging.Log {
+func (installer *roleInstaller) roleLog(role installerRole) logging.Log {
 	return roleLog{installer, role.Index}
 }
 
