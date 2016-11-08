@@ -1,5 +1,10 @@
 package util
 
+import (
+	"sync"
+	"sync/atomic"
+)
+
 type CompletionLatch interface {
 	Success()
 	Failure()
@@ -7,27 +12,57 @@ type CompletionLatch interface {
 }
 
 type completionLatchImpl struct {
-	count   int
-	channel chan bool
+	remaining      *int32
+	result         *int32
+	updateLock     *sync.Mutex
+	completionLock *sync.Mutex
 }
 
 func NewCompletionLatch(count int) CompletionLatch {
-	return completionLatchImpl{count, make(chan bool, count)}
+	count32 := int32(count)
+	result32 := int32(1)
+
+	latch := completionLatchImpl{
+		remaining:      &count32,
+		result:         &result32,
+		updateLock:     &sync.Mutex{},
+		completionLock: &sync.Mutex{},
+	}
+	latch.completionLock.Lock()
+	return latch
 }
 
 func (latch completionLatchImpl) Success() {
-	latch.channel <- true
+	latch.updateLock.Lock()
+
+	atomic.AddInt32(latch.remaining, -1)
+
+	if atomic.LoadInt32(latch.remaining) == 0 {
+		latch.completionLock.Unlock()
+	}
+
+	latch.updateLock.Unlock()
 }
 
 func (latch completionLatchImpl) Failure() {
-	latch.channel <- false
+	latch.updateLock.Lock()
+
+	atomic.AddInt32(latch.remaining, -1)
+	atomic.StoreInt32(latch.result, 0)
+
+	if atomic.LoadInt32(latch.remaining) == 0 {
+		latch.completionLock.Unlock()
+	}
+
+	latch.updateLock.Unlock()
 }
 
 func (latch completionLatchImpl) Await() bool {
-	finalResult := true
-	for i := 0; i < latch.count; i++ {
-		result := <-latch.channel
-		finalResult = finalResult && result
-	}
-	return finalResult
+	latch.completionLock.Lock()
+
+	result := atomic.LoadInt32(latch.result) == 1
+
+	latch.completionLock.Unlock()
+
+	return result
 }
