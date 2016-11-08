@@ -1,12 +1,14 @@
 package roleinstaller
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/gantsign/alt-galaxy/internal/application"
 	"github.com/gantsign/alt-galaxy/internal/message"
@@ -49,15 +51,32 @@ type roleInstaller struct {
 }
 
 func (installer *roleInstaller) printOutput() {
+	stdOut := bufio.NewWriter(os.Stdout)
+	stdErr := bufio.NewWriter(os.Stderr)
 	for _, output := range installer.roleOutputBuffers {
 		for msg := range output {
 			switch msg.MessageType {
 			case message.OutMsg:
-				fmt.Println("- ", msg.Body)
+				fmt.Fprintln(stdOut, "- ", msg.Body)
+				stdOut.Flush()
 			case message.ErrorMsg:
-				fmt.Fprintln(os.Stderr, "ERROR! ", msg.Body)
+				// A short sleep helps the stdout and stderr render in the correct order
+				time.Sleep(time.Second)
+
+				fmt.Fprintln(stdErr, "ERROR! ", msg.Body)
+				stdErr.Flush()
+
+				// A short sleep helps the stdout and stderr render in the correct order
+				time.Sleep(time.Second)
 			default:
-				fmt.Fprintln(os.Stderr, fmt.Sprintf("ERROR! Unsupported MessageType: %d", msg.MessageType))
+				// A short sleep helps the stdout and stderr render in the correct order
+				time.Sleep(time.Second)
+
+				fmt.Fprintln(stdErr, fmt.Sprintf("ERROR! Unsupported MessageType: %d", msg.MessageType))
+				stdErr.Flush()
+
+				// A short sleep helps the stdout and stderr render in the correct order
+				time.Sleep(time.Second)
 			}
 		}
 	}
