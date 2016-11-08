@@ -24,9 +24,10 @@ func (latch completionLatchImpl) Failure() {
 }
 
 func (latch completionLatchImpl) Await() bool {
-	result := true
+	finalResult := true
 	for i := 0; i < latch.count; i++ {
-		result = result && <-latch.channel
+		result := <-latch.channel
+		finalResult = finalResult && result
 	}
-	return result
+	return finalResult
 }
