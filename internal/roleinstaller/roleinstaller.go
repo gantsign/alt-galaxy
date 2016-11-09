@@ -12,6 +12,7 @@ import (
 
 	"github.com/gantsign/alt-galaxy/internal/application"
 	"github.com/gantsign/alt-galaxy/internal/message"
+	"github.com/gantsign/alt-galaxy/internal/metadata"
 	"github.com/gantsign/alt-galaxy/internal/restapi"
 	"github.com/gantsign/alt-galaxy/internal/restclient"
 	"github.com/gantsign/alt-galaxy/internal/rolesfile"
@@ -20,9 +21,10 @@ import (
 )
 
 const (
-	maxConcurrentGitHubDownloads = 10
-	maxConcurrentGalaxyRequests  = 10
-	maxConcurrentUntar           = 2
+	maxConcurrentGitHubDownloads   = 10
+	maxConcurrentGalaxyRequests    = 10
+	maxConcurrentUntar             = 2
+	maxConcurrentParseDependencies = 2
 )
 
 type additionalRoleFields struct {
@@ -37,18 +39,21 @@ type installerRole struct {
 }
 
 type roleInstaller struct {
-	rolesPath               string
-	roleLookupQueue         chan installerRole
-	roleDownloadQueue       chan installerRole
-	roleUntarQueue          chan installerRole
-	roleOutputBuffers       chan chan message.Message
-	restClient              restclient.RestClient
-	restApi                 restapi.RestApi
-	galaxyRequestSemaphore  util.Semaphore
-	gitHubDownloadSemaphore util.Semaphore
-	untarSemaphore          util.Semaphore
-	roleLatch               util.CompletionLatch
-	loggingLatch            util.CompletionLatch
+	rolesPath                  string
+	roleLookupQueue            chan installerRole
+	roleDownloadQueue          chan installerRole
+	roleUntarQueue             chan installerRole
+	roleParseDependenciesQueue chan installerRole
+	roleOutputBuffers          chan chan message.Message
+	restClient                 restclient.RestClient
+	restApi                    restapi.RestApi
+	galaxyRequestSemaphore     util.Semaphore
+	gitHubDownloadSemaphore    util.Semaphore
+	untarSemaphore             util.Semaphore
+	parseDependenciesSemaphore util.Semaphore
+	roleLatch                  util.CompletionLatch
+	loggingLatch               util.CompletionLatch
+	roleNames                  []string
 }
 
 func (installer *roleInstaller) printOutput() {
@@ -173,7 +178,8 @@ func (installer *roleInstaller) untarRole(role installerRole) {
 	}
 
 	installer.untarSemaphore.Release()
-	installer.success(role)
+
+	installer.roleParseDependenciesQueue <- role
 }
 
 func (installer *roleInstaller) untarRoles() {
@@ -181,6 +187,65 @@ func (installer *roleInstaller) untarRoles() {
 		installer.untarSemaphore.Acquire()
 
 		go installer.untarRole(role)
+	}
+}
+
+func (installer *roleInstaller) isDuplicateRole(roleName string) bool {
+	for _, name := range installer.roleNames {
+		if name == roleName {
+			return true
+		}
+	}
+	return false
+}
+
+func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
+	metadataPath := path.Join(installer.rolesPath, role.Name, "meta", "main.yml")
+	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+		// no metadata = no dependencies
+		installer.parseDependenciesSemaphore.Release()
+		installer.success(role)
+		return
+	}
+
+	metadata, err := metadata.ParseMetadataFile(metadataPath)
+	if err != nil {
+		role.Errorf("Failed to read role metadata [%s].\nCaused by: %s", metadataPath, err)
+		installer.parseDependenciesSemaphore.Release()
+		installer.fail(role)
+		return
+	}
+
+	for _, dependency := range metadata.Dependencies {
+		// We don't want role dependencies overwriting the versions of the roles
+		// explicitly specified in the roles file.
+		if installer.isDuplicateRole(dependency.Name) {
+			continue
+		}
+
+		role.Progressf("adding dependency: %s", dependency.Name)
+
+		fileRole := rolesfile.Role{
+			Src:  dependency.Name,
+			Name: dependency.Name,
+		}
+
+		outputBuffer := make(chan message.Message, 20)
+		installer.roleOutputBuffers <- outputBuffer
+
+		installer.roleLatch.TaskAdded()
+		installer.roleLookupQueue <- installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
+	}
+
+	installer.parseDependenciesSemaphore.Release()
+	installer.success(role)
+}
+
+func (installer *roleInstaller) parseDependenciesForRoles() {
+	for role := range installer.roleParseDependenciesQueue {
+		installer.parseDependenciesSemaphore.Acquire()
+
+		go installer.parseDependenciesForRole(role)
 	}
 }
 
@@ -196,6 +261,14 @@ func (cmd RoleInstallerCmd) Execute() error {
 		return fmt.Errorf("Failed to read role file [%s].\nCaused by: %s", cmd.RoleFile, err)
 	}
 
+	roleNames := make([]string, len(roles))
+	for index := range roles {
+		if !strings.Contains(roles[index].Src, "://") {
+			roles[index].Name = roles[index].Src
+		}
+		roleNames[index] = roles[index].Name
+	}
+
 	httpClient := &http.Client{}
 	userAgent := fmt.Sprintf("%s/%s (+%s)", application.Name, application.Version, application.Repository)
 	restClient, err := restclient.NewRestClient(httpClient, userAgent)
@@ -209,25 +282,31 @@ func (cmd RoleInstallerCmd) Execute() error {
 		return fmt.Errorf("Failed to create REST API.\nCaused by: %s", err)
 	}
 
+	queueSize := len(roles) + 100
+
 	installer := &roleInstaller{
-		rolesPath:               cmd.RolesPath,
-		restClient:              restClient,
-		restApi:                 restApi,
-		roleLookupQueue:         make(chan installerRole, len(roles)),
-		roleDownloadQueue:       make(chan installerRole, len(roles)),
-		roleUntarQueue:          make(chan installerRole, len(roles)),
-		roleLatch:               util.NewCompletionLatch(len(roles)),
-		loggingLatch:            util.NewCompletionLatch(1),
-		roleOutputBuffers:       make(chan chan message.Message, len(roles)),
-		galaxyRequestSemaphore:  util.NewSemaphore(maxConcurrentGalaxyRequests),
-		gitHubDownloadSemaphore: util.NewSemaphore(maxConcurrentGitHubDownloads),
-		untarSemaphore:          util.NewSemaphore(maxConcurrentUntar),
+		rolesPath:                  cmd.RolesPath,
+		restClient:                 restClient,
+		restApi:                    restApi,
+		roleLookupQueue:            make(chan installerRole, queueSize),
+		roleDownloadQueue:          make(chan installerRole, queueSize),
+		roleUntarQueue:             make(chan installerRole, queueSize),
+		roleParseDependenciesQueue: make(chan installerRole, queueSize),
+		roleLatch:                  util.NewCompletionLatch(len(roles)),
+		loggingLatch:               util.NewCompletionLatch(1),
+		roleOutputBuffers:          make(chan chan message.Message, queueSize),
+		galaxyRequestSemaphore:     util.NewSemaphore(maxConcurrentGalaxyRequests),
+		gitHubDownloadSemaphore:    util.NewSemaphore(maxConcurrentGitHubDownloads),
+		untarSemaphore:             util.NewSemaphore(maxConcurrentUntar),
+		parseDependenciesSemaphore: util.NewSemaphore(maxConcurrentParseDependencies),
+		roleNames:                  roleNames,
 	}
 
 	go installer.printOutput()
 	go installer.lookupRoles()
 	go installer.downloadRoles()
 	go installer.untarRoles()
+	go installer.parseDependenciesForRoles()
 
 	for _, fileRole := range roles {
 		outputBuffer := make(chan message.Message, 20)
@@ -242,7 +321,6 @@ func (cmd RoleInstallerCmd) Execute() error {
 			role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
 			installer.fail(role)
 		} else {
-			role.Name = role.Src
 			installer.roleLookupQueue <- role
 		}
 	}
