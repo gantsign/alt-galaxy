@@ -3,6 +3,14 @@
 set -e
 
 echo
+echo '#################'
+echo '# Running tests #'
+echo '#################'
+echo
+
+go test ./...
+
+echo
 echo '#####################'
 echo '# Building binaries #'
 echo '#####################'

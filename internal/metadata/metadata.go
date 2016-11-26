@@ -1,35 +1,56 @@
 package metadata
 
 import (
+	"errors"
 	"io/ioutil"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
 
-type ComplexRole struct {
-	Name string `yaml:"role,omitempty"`
+type complexRole struct {
+	Role string `yaml:"role"`
 }
 
 type Role struct {
-	Name string
+	Src     string
+	Name    string
+	Version string
+}
+
+func (role *Role) setPropertiesFromString(specification string) {
+	tokens := strings.Split(specification, ",")
+	role.Src = tokens[0]
+
+	if len(tokens) >= 2 {
+		role.Version = tokens[1]
+	}
+
+	if len(tokens) >= 3 {
+		role.Name = tokens[2]
+	}
 }
 
 func (role *Role) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Maybe a simple string
-	var roleName string
-	err := unmarshal(&roleName)
+	var roleSpecification string
+	err := unmarshal(&roleSpecification)
 	if err == nil {
-		role.Name = roleName
+		role.setPropertiesFromString(roleSpecification)
 		return nil
 	}
 
 	// Maybe an object literal
-	var complexRole ComplexRole
+	var complexRole complexRole
 	err = unmarshal(&complexRole)
 	if err != nil {
 		return err
 	}
-	role.Name = complexRole.Name
+
+	if complexRole.Role == "" {
+		return errors.New("Unable to parse dependencies: expected property 'role' is missing or empty.")
+	}
+	role.setPropertiesFromString(complexRole.Role)
 	return nil
 }
 
@@ -37,13 +58,17 @@ type Metadata struct {
 	Dependencies []Role `yaml:"dependencies,omitempty"`
 }
 
+func parseMetadataBytes(yamlBytes []byte) (Metadata, error) {
+	var metadata Metadata
+	err := yaml.Unmarshal(yamlBytes, &metadata)
+
+	return metadata, err
+}
+
 func ParseMetadataFile(filename string) (Metadata, error) {
 	yamlBytes, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return Metadata{}, err
 	}
-	var metadata Metadata
-	err = yaml.Unmarshal(yamlBytes, &metadata)
-
-	return metadata, err
+	return parseMetadataBytes(yamlBytes)
 }
