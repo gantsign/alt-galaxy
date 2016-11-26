@@ -220,6 +220,27 @@ func (installer *roleInstaller) isDuplicateRole(roleName string) bool {
 	return false
 }
 
+func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
+	if fileRole.Name == "" {
+		fileRole.Name = repoUrlToRoleName(fileRole.Src)
+	}
+
+	outputBuffer := make(chan message.Message, 20)
+	installer.roleOutputBuffers <- outputBuffer
+
+	role := installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
+
+	if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
+		role.Url = role.Src
+		installer.roleDownloadQueue <- role
+	} else if strings.Contains(role.Src, "://") {
+		role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
+		installer.fail(role)
+	} else {
+		installer.roleLookupQueue <- role
+	}
+}
+
 func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
 	metadataPath := path.Join(installer.rolesPath, role.Name, "meta", "main.yml")
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
@@ -229,7 +250,7 @@ func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
 		return
 	}
 
-	metadata, err := metadata.ParseMetadataFile(metadataPath)
+	roleMetadata, err := metadata.ParseMetadataFile(metadataPath)
 	if err != nil {
 		role.Errorf("Failed to read role metadata [%s].\nCaused by: %s", metadataPath, err)
 		installer.parseDependenciesSemaphore.Release()
@@ -237,7 +258,10 @@ func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
 		return
 	}
 
-	for _, dependency := range metadata.Dependencies {
+	for _, dependency := range roleMetadata.Dependencies {
+		if dependency.Name == "" {
+			dependency.Name = repoUrlToRoleName(dependency.Src)
+		}
 		// We don't want role dependencies overwriting the versions of the roles
 		// explicitly specified in the roles file.
 		if installer.isDuplicateRole(dependency.Name) {
@@ -246,16 +270,13 @@ func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
 
 		role.Progressf("adding dependency: %s", dependency.Name)
 
-		fileRole := rolesfile.Role{
-			Src:  dependency.Name,
-			Name: dependency.Name,
-		}
-
-		outputBuffer := make(chan message.Message, 20)
-		installer.roleOutputBuffers <- outputBuffer
-
 		installer.roleLatch.TaskAdded()
-		installer.roleLookupQueue <- installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
+
+		installer.addRole(rolesfile.Role{
+			Src:     dependency.Src,
+			Name:    dependency.Name,
+			Version: dependency.Version,
+		})
 	}
 
 	installer.parseDependenciesSemaphore.Release()
@@ -330,23 +351,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 	go installer.parseDependenciesForRoles()
 
 	for _, fileRole := range roles {
-		outputBuffer := make(chan message.Message, 20)
-		installer.roleOutputBuffers <- outputBuffer
-
-		role := installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
-
-		if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
-			role.Url = role.Src
-			if role.Name == "" {
-				role.Name = repoUrlToRoleName(role.Url)
-			}
-			installer.roleDownloadQueue <- role
-		} else if strings.Contains(role.Src, "://") {
-			role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
-			installer.fail(role)
-		} else {
-			installer.roleLookupQueue <- role
-		}
+		installer.addRole(fileRole)
 	}
 
 	success := installer.roleLatch.Await()
