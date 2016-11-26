@@ -56,6 +56,27 @@ type roleInstaller struct {
 	roleNames                  []string
 }
 
+func repoUrlToRoleName(repoUrl string) string {
+	// gets the role name out of a repo like
+	// http://git.example.com/repos/repo.git" => "repo"
+
+	if !strings.Contains(repoUrl, "://") && !strings.Contains(repoUrl, "@") {
+		return repoUrl
+	}
+	splitPath := strings.Split(repoUrl, "/")
+	trailingPath := splitPath[len(splitPath)-1]
+	if strings.HasSuffix(trailingPath, ".git") {
+		trailingPath = trailingPath[:len(trailingPath)-4]
+	}
+	if strings.HasSuffix(trailingPath, ".tar.gz") {
+		trailingPath = trailingPath[:len(trailingPath)-7]
+	}
+	if strings.Contains(trailingPath, ",") {
+		trailingPath = strings.Split(trailingPath, ",")[0]
+	}
+	return trailingPath
+}
+
 func (installer *roleInstaller) printOutput() {
 	stdOut := bufio.NewWriter(os.Stdout)
 	stdErr := bufio.NewWriter(os.Stderr)
@@ -316,6 +337,9 @@ func (cmd RoleInstallerCmd) Execute() error {
 
 		if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 			role.Url = role.Src
+			if role.Name == "" {
+				role.Name = repoUrlToRoleName(role.Url)
+			}
 			installer.roleDownloadQueue <- role
 		} else if strings.Contains(role.Src, "://") {
 			role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
