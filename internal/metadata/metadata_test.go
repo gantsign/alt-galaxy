@@ -150,12 +150,11 @@ func TestRoleStringDependencyVersionName(t *testing.T) {
 	}
 }
 
-func TestMixedDependencies(t *testing.T) {
+func TestObjectDependency(t *testing.T) {
 	actual, err := parseMetadataString(`{
 		"dependencies": [
-			"gantsign.test,1.0,test",
 			{
-				"role": "gantsign.test2,2.0,test2"
+				"src": "gantsign.test"
 			}
 		]
 	}`)
@@ -164,7 +163,85 @@ func TestMixedDependencies(t *testing.T) {
 		return
 	}
 
-	dependencies := make([]Role, 2)
+	expected := Role{
+		Src: "gantsign.test",
+	}.toMetadata()
+
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Expected [%+v], actual [%+v].", expected, actual)
+	}
+}
+
+func TestObjectDependencyVersion(t *testing.T) {
+	actual, err := parseMetadataString(`{
+		"dependencies": [
+			{
+				"src": "gantsign.test",
+				"version": "1.0"
+			}
+		]
+	}`)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	expected := Role{
+		Src:     "gantsign.test",
+		Version: "1.0",
+	}.toMetadata()
+
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Expected [%+v], actual [%+v].", expected, actual)
+	}
+}
+
+func TestObjectDependencyVersionName(t *testing.T) {
+	actual, err := parseMetadataString(`{
+		"dependencies": [
+			{
+				"src": "gantsign.test",
+				"version": "1.0",
+				"name": "test"
+			}
+		]
+	}`)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	expected := Role{
+		Src:     "gantsign.test",
+		Version: "1.0",
+		Name:    "test",
+	}.toMetadata()
+
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Expected [%+v], actual [%+v].", expected, actual)
+	}
+}
+
+func TestMixedDependencies(t *testing.T) {
+	actual, err := parseMetadataString(`{
+		"dependencies": [
+			"gantsign.test,1.0,test",
+			{
+				"role": "gantsign.test2,2.0,test2"
+			},
+			{
+				"src": "gantsign.test3",
+				"version": "3.0",
+				"name": "test3"
+			}
+		]
+	}`)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	dependencies := make([]Role, 3)
 	dependencies[0] = Role{
 		Src:     "gantsign.test",
 		Version: "1.0",
@@ -174,6 +251,11 @@ func TestMixedDependencies(t *testing.T) {
 		Src:     "gantsign.test2",
 		Version: "2.0",
 		Name:    "test2",
+	}
+	dependencies[2] = Role{
+		Src:     "gantsign.test3",
+		Version: "3.0",
+		Name:    "test3",
 	}
 	var expected Metadata
 	expected.Dependencies = dependencies

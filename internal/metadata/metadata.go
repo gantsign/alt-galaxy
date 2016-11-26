@@ -9,7 +9,10 @@ import (
 )
 
 type complexRole struct {
-	Role string `yaml:"role"`
+	Role    string `yaml:"role,omitempty"`
+	Src     string `yaml:"src,omitempty"`
+	Name    string `yaml:"name,omitempty"`
+	Version string `yaml:"version,omitempty"`
 }
 
 type Role struct {
@@ -47,10 +50,18 @@ func (role *Role) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	if complexRole.Role == "" {
-		return errors.New("Unable to parse dependencies: expected property 'role' is missing or empty.")
+	if complexRole.Role != "" {
+		role.setPropertiesFromString(complexRole.Role)
+		return nil
 	}
-	role.setPropertiesFromString(complexRole.Role)
+
+	if complexRole.Src == "" {
+		return errors.New("Unable to parse dependencies: one of property 'role' or 'src' must be specified.")
+	}
+
+	role.Src = complexRole.Src
+	role.Version = complexRole.Version
+	role.Name = complexRole.Name
 	return nil
 }
 
