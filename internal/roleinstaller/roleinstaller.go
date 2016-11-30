@@ -26,7 +26,7 @@ const (
 	maxConcurrentParseDependencies = 2
 )
 
-type roleInstaller struct {
+type context struct {
 	rolesPath                  string
 	roleLookupQueue            chan model.Role
 	roleDownloadQueue          chan model.Role
@@ -64,37 +64,37 @@ func repoUrlToRoleName(repoUrl string) string {
 	return trailingPath
 }
 
-func (installer *roleInstaller) fail(role model.Role) {
+func (ctx *context) fail(role model.Role) {
 	role.Progressf("%s install failed", role.Name)
 	role.Close()
-	installer.roleLatch.Failure()
+	ctx.roleLatch.Failure()
 }
 
-func (installer *roleInstaller) success(role model.Role) {
+func (ctx *context) success(role model.Role) {
 	role.Progressf("%s was installed successfully", role.Name)
 	role.Close()
-	installer.roleLatch.Success()
+	ctx.roleLatch.Success()
 }
 
-func (installer *roleInstaller) lookupRole(role model.Role) {
+func (ctx *context) lookupRole(role model.Role) {
 	roleName, err := role.ParseRoleName()
 	if err != nil {
 		role.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
-		installer.galaxyRequestSemaphore.Release()
-		installer.fail(role)
+		ctx.galaxyRequestSemaphore.Release()
+		ctx.fail(role)
 		return
 	}
 
 	role.Progressf("downloading role '%s', owned by %s", roleName.RoleNamePart, roleName.UsernamePart)
 
-	roleQueryResponse, err := installer.restApi.QueryRolesByName(roleName)
+	roleQueryResponse, err := ctx.restApi.QueryRolesByName(roleName)
 	if err != nil {
 		role.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
-		installer.galaxyRequestSemaphore.Release()
-		installer.fail(role)
+		ctx.galaxyRequestSemaphore.Release()
+		ctx.fail(role)
 		return
 	}
-	installer.galaxyRequestSemaphore.Release()
+	ctx.galaxyRequestSemaphore.Release()
 
 	roleDetails := roleQueryResponse.Results[0]
 	if role.Version == "" {
@@ -102,71 +102,71 @@ func (installer *roleInstaller) lookupRole(role model.Role) {
 	}
 	role.Url = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz", roleDetails.GitHubUser, roleDetails.GitHubRepo, role.Version)
 
-	installer.roleDownloadQueue <- role
+	ctx.roleDownloadQueue <- role
 }
 
-func (installer *roleInstaller) lookupRoles() {
-	for role := range installer.roleLookupQueue {
-		installer.galaxyRequestSemaphore.Acquire()
+func (ctx *context) lookupRoles() {
+	for role := range ctx.roleLookupQueue {
+		ctx.galaxyRequestSemaphore.Acquire()
 
-		go installer.lookupRole(role)
+		go ctx.lookupRole(role)
 	}
 }
 
-func (installer *roleInstaller) downloadRole(role model.Role) {
-	destFilePath := path.Join(installer.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
+func (ctx *context) downloadRole(role model.Role) {
+	destFilePath := path.Join(ctx.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
 
 	role.Progressf("downloading role from %s", role.Url)
-	destFilePath, err := installer.restClient.DownloadUrl(role.Url, destFilePath)
+	destFilePath, err := ctx.restClient.DownloadUrl(role.Url, destFilePath)
 	if err != nil {
 		role.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
-		installer.gitHubDownloadSemaphore.Release()
-		installer.fail(role)
+		ctx.gitHubDownloadSemaphore.Release()
+		ctx.fail(role)
 		return
 	}
 	role.ArchivePath = destFilePath
 
-	installer.gitHubDownloadSemaphore.Release()
+	ctx.gitHubDownloadSemaphore.Release()
 
-	installer.roleUntarQueue <- role
+	ctx.roleUntarQueue <- role
 }
 
-func (installer *roleInstaller) downloadRoles() {
-	for role := range installer.roleDownloadQueue {
-		installer.gitHubDownloadSemaphore.Acquire()
+func (ctx *context) downloadRoles() {
+	for role := range ctx.roleDownloadQueue {
+		ctx.gitHubDownloadSemaphore.Acquire()
 
-		go installer.downloadRole(role)
+		go ctx.downloadRole(role)
 	}
 }
 
-func (installer *roleInstaller) untarRole(role model.Role) {
-	destDirPath := path.Join(installer.rolesPath, role.Name)
+func (ctx *context) untarRole(role model.Role) {
+	destDirPath := path.Join(ctx.rolesPath, role.Name)
 
 	role.Progressf("extracting %s to %s", role.Name, destDirPath)
 
 	err := untar.Untar(role, role.ArchivePath, destDirPath)
 	if err != nil {
 		role.Errorf("Failed to untar archive [%s].\nCaused by: %s", role.ArchivePath, err)
-		installer.untarSemaphore.Release()
-		installer.fail(role)
+		ctx.untarSemaphore.Release()
+		ctx.fail(role)
 		return
 	}
 
-	installer.untarSemaphore.Release()
+	ctx.untarSemaphore.Release()
 
-	installer.roleParseDependenciesQueue <- role
+	ctx.roleParseDependenciesQueue <- role
 }
 
-func (installer *roleInstaller) untarRoles() {
-	for role := range installer.roleUntarQueue {
-		installer.untarSemaphore.Acquire()
+func (ctx *context) untarRoles() {
+	for role := range ctx.roleUntarQueue {
+		ctx.untarSemaphore.Acquire()
 
-		go installer.untarRole(role)
+		go ctx.untarRole(role)
 	}
 }
 
-func (installer *roleInstaller) isDuplicateRole(roleName string) bool {
-	for _, name := range installer.roleNames {
+func (ctx *context) isDuplicateRole(roleName string) bool {
+	for _, name := range ctx.roleNames {
 		if name == roleName {
 			return true
 		}
@@ -174,40 +174,40 @@ func (installer *roleInstaller) isDuplicateRole(roleName string) bool {
 	return false
 }
 
-func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
+func (ctx *context) addRole(fileRole rolesfile.Role) {
 	if fileRole.Name == "" {
 		fileRole.Name = repoUrlToRoleName(fileRole.Src)
 	}
 
-	logger := installer.loggerFactory.NewLogger()
+	logger := ctx.loggerFactory.NewLogger()
 
 	role := model.NewRole(fileRole, logger)
 
 	if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 		role.Url = role.Src
-		installer.roleDownloadQueue <- role
+		ctx.roleDownloadQueue <- role
 	} else if strings.Contains(role.Src, "://") {
 		role.Errorf("Unsupported protocol in URL [%s]; only 'http' and 'https' are supported.", role.Src)
-		installer.fail(role)
+		ctx.fail(role)
 	} else {
-		installer.roleLookupQueue <- role
+		ctx.roleLookupQueue <- role
 	}
 }
 
-func (installer *roleInstaller) parseDependenciesForRole(role model.Role) {
-	metadataPath := path.Join(installer.rolesPath, role.Name, "meta", "main.yml")
+func (ctx *context) parseDependenciesForRole(role model.Role) {
+	metadataPath := path.Join(ctx.rolesPath, role.Name, "meta", "main.yml")
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 		// no metadata = no dependencies
-		installer.parseDependenciesSemaphore.Release()
-		installer.success(role)
+		ctx.parseDependenciesSemaphore.Release()
+		ctx.success(role)
 		return
 	}
 
 	roleMetadata, err := metadata.ParseMetadataFile(metadataPath)
 	if err != nil {
 		role.Errorf("Failed to read role metadata [%s].\nCaused by: %s", metadataPath, err)
-		installer.parseDependenciesSemaphore.Release()
-		installer.fail(role)
+		ctx.parseDependenciesSemaphore.Release()
+		ctx.fail(role)
 		return
 	}
 
@@ -217,30 +217,30 @@ func (installer *roleInstaller) parseDependenciesForRole(role model.Role) {
 		}
 		// We don't want role dependencies overwriting the versions of the roles
 		// explicitly specified in the roles file.
-		if installer.isDuplicateRole(dependency.Name) {
+		if ctx.isDuplicateRole(dependency.Name) {
 			continue
 		}
 
 		role.Progressf("adding dependency: %s", dependency.Name)
 
-		installer.roleLatch.TaskAdded()
+		ctx.roleLatch.TaskAdded()
 
-		installer.addRole(rolesfile.Role{
+		ctx.addRole(rolesfile.Role{
 			Src:     dependency.Src,
 			Name:    dependency.Name,
 			Version: dependency.Version,
 		})
 	}
 
-	installer.parseDependenciesSemaphore.Release()
-	installer.success(role)
+	ctx.parseDependenciesSemaphore.Release()
+	ctx.success(role)
 }
 
-func (installer *roleInstaller) parseDependenciesForRoles() {
-	for role := range installer.roleParseDependenciesQueue {
-		installer.parseDependenciesSemaphore.Acquire()
+func (ctx *context) parseDependenciesForRoles() {
+	for role := range ctx.roleParseDependenciesQueue {
+		ctx.parseDependenciesSemaphore.Acquire()
 
-		go installer.parseDependenciesForRole(role)
+		go ctx.parseDependenciesForRole(role)
 	}
 }
 
@@ -279,7 +279,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 
 	queueSize := len(roles) + 100
 
-	installer := &roleInstaller{
+	ctx := &context{
 		rolesPath:                  cmd.RolesPath,
 		restClient:                 restClient,
 		restApi:                    restApi,
@@ -296,21 +296,21 @@ func (cmd RoleInstallerCmd) Execute() error {
 		roleNames:                  roleNames,
 	}
 
-	installer.loggerFactory.StartOutput()
+	ctx.loggerFactory.StartOutput()
 
-	go installer.lookupRoles()
-	go installer.downloadRoles()
-	go installer.untarRoles()
-	go installer.parseDependenciesForRoles()
+	go ctx.lookupRoles()
+	go ctx.downloadRoles()
+	go ctx.untarRoles()
+	go ctx.parseDependenciesForRoles()
 
 	for _, fileRole := range roles {
-		installer.addRole(fileRole)
+		ctx.addRole(fileRole)
 	}
 
-	success := installer.roleLatch.Await()
+	success := ctx.roleLatch.Await()
 
-	installer.loggerFactory.Close()
-	installer.loggerFactory.AwaitOutputComplete()
+	ctx.loggerFactory.Close()
+	ctx.loggerFactory.AwaitOutputComplete()
 
 	if !success {
 		return errors.New("Failed to complete successfully. Any error output should be visible above. Please fix these errors and try again.")
