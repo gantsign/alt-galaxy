@@ -174,7 +174,7 @@ func (ctx *context) isDuplicateRole(roleName string) bool {
 	return false
 }
 
-func (ctx *context) addRole(fileRole rolesfile.Role) {
+func (ctx *context) installRole(fileRole rolesfile.Role) {
 	if fileRole.Name == "" {
 		fileRole.Name = repoUrlToRoleName(fileRole.Src)
 	}
@@ -225,7 +225,7 @@ func (ctx *context) parseDependenciesForRole(role model.Role) {
 
 		ctx.roleLatch.TaskAdded()
 
-		ctx.addRole(rolesfile.Role{
+		ctx.installRole(rolesfile.Role{
 			Src:     dependency.Src,
 			Name:    dependency.Name,
 			Version: dependency.Version,
@@ -304,7 +304,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 	go ctx.parseDependenciesForRoles()
 
 	for _, fileRole := range roles {
-		ctx.addRole(fileRole)
+		ctx.installRole(fileRole)
 	}
 
 	success := ctx.roleLatch.Await()
