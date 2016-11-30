@@ -13,6 +13,7 @@ import (
 	"github.com/gantsign/alt-galaxy/internal/metadata"
 	"github.com/gantsign/alt-galaxy/internal/restapi"
 	"github.com/gantsign/alt-galaxy/internal/restclient"
+	"github.com/gantsign/alt-galaxy/internal/roleinstaller/internal/model"
 	"github.com/gantsign/alt-galaxy/internal/rolesfile"
 	"github.com/gantsign/alt-galaxy/internal/untar"
 	"github.com/gantsign/alt-galaxy/internal/util"
@@ -25,23 +26,12 @@ const (
 	maxConcurrentParseDependencies = 2
 )
 
-type additionalRoleFields struct {
-	Url         string
-	ArchivePath string
-}
-
-type installerRole struct {
-	rolesfile.Role
-	logging.SerialLogger
-	additionalRoleFields
-}
-
 type roleInstaller struct {
 	rolesPath                  string
-	roleLookupQueue            chan installerRole
-	roleDownloadQueue          chan installerRole
-	roleUntarQueue             chan installerRole
-	roleParseDependenciesQueue chan installerRole
+	roleLookupQueue            chan model.Role
+	roleDownloadQueue          chan model.Role
+	roleUntarQueue             chan model.Role
+	roleParseDependenciesQueue chan model.Role
 	loggerFactory              logging.SerialLoggerFactory
 	restClient                 restclient.RestClient
 	restApi                    restapi.RestApi
@@ -74,19 +64,19 @@ func repoUrlToRoleName(repoUrl string) string {
 	return trailingPath
 }
 
-func (installer *roleInstaller) fail(role installerRole) {
+func (installer *roleInstaller) fail(role model.Role) {
 	role.Progressf("%s install failed", role.Name)
 	role.Close()
 	installer.roleLatch.Failure()
 }
 
-func (installer *roleInstaller) success(role installerRole) {
+func (installer *roleInstaller) success(role model.Role) {
 	role.Progressf("%s was installed successfully", role.Name)
 	role.Close()
 	installer.roleLatch.Success()
 }
 
-func (installer *roleInstaller) lookupRole(role installerRole) {
+func (installer *roleInstaller) lookupRole(role model.Role) {
 	roleName, err := role.ParseRoleName()
 	if err != nil {
 		role.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
@@ -123,7 +113,7 @@ func (installer *roleInstaller) lookupRoles() {
 	}
 }
 
-func (installer *roleInstaller) downloadRole(role installerRole) {
+func (installer *roleInstaller) downloadRole(role model.Role) {
 	destFilePath := path.Join(installer.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
 
 	role.Progressf("downloading role from %s", role.Url)
@@ -149,7 +139,7 @@ func (installer *roleInstaller) downloadRoles() {
 	}
 }
 
-func (installer *roleInstaller) untarRole(role installerRole) {
+func (installer *roleInstaller) untarRole(role model.Role) {
 	destDirPath := path.Join(installer.rolesPath, role.Name)
 
 	role.Progressf("extracting %s to %s", role.Name, destDirPath)
@@ -191,7 +181,7 @@ func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
 
 	logger := installer.loggerFactory.NewLogger()
 
-	role := installerRole{fileRole, logger, additionalRoleFields{}}
+	role := model.NewRole(fileRole, logger)
 
 	if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 		role.Url = role.Src
@@ -204,7 +194,7 @@ func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
 	}
 }
 
-func (installer *roleInstaller) parseDependenciesForRole(role installerRole) {
+func (installer *roleInstaller) parseDependenciesForRole(role model.Role) {
 	metadataPath := path.Join(installer.rolesPath, role.Name, "meta", "main.yml")
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 		// no metadata = no dependencies
@@ -293,10 +283,10 @@ func (cmd RoleInstallerCmd) Execute() error {
 		rolesPath:                  cmd.RolesPath,
 		restClient:                 restClient,
 		restApi:                    restApi,
-		roleLookupQueue:            make(chan installerRole, queueSize),
-		roleDownloadQueue:          make(chan installerRole, queueSize),
-		roleUntarQueue:             make(chan installerRole, queueSize),
-		roleParseDependenciesQueue: make(chan installerRole, queueSize),
+		roleLookupQueue:            make(chan model.Role, queueSize),
+		roleDownloadQueue:          make(chan model.Role, queueSize),
+		roleUntarQueue:             make(chan model.Role, queueSize),
+		roleParseDependenciesQueue: make(chan model.Role, queueSize),
 		roleLatch:                  util.NewCompletionLatch(len(roles)),
 		loggerFactory:              logging.NewSerialLoggerFactory(queueSize),
 		galaxyRequestSemaphore:     util.NewSemaphore(maxConcurrentGalaxyRequests),
