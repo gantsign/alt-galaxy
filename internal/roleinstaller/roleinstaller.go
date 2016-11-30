@@ -64,6 +64,22 @@ func repoUrlToRoleName(repoUrl string) string {
 	return trailingPath
 }
 
+func (ctx *context) RepoUrlToRoleName(repoUrl string) string {
+	return repoUrlToRoleName(repoUrl)
+}
+
+func (ctx *context) RolesPath() string {
+	return ctx.rolesPath
+}
+
+func (ctx *context) RestClient() restclient.RestClient {
+	return ctx.restClient
+}
+
+func (ctx *context) RestApi() restapi.RestApi {
+	return ctx.restApi
+}
+
 func (ctx *context) fail(role model.Role) {
 	role.Progressf("%s install failed", role.Name)
 	role.Close()
@@ -87,7 +103,7 @@ func (ctx *context) lookupRole(role model.Role) {
 
 	role.Progressf("downloading role '%s', owned by %s", roleName.RoleNamePart, roleName.UsernamePart)
 
-	roleQueryResponse, err := ctx.restApi.QueryRolesByName(roleName)
+	roleQueryResponse, err := ctx.RestApi().QueryRolesByName(roleName)
 	if err != nil {
 		role.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
 		ctx.galaxyRequestSemaphore.Release()
@@ -114,10 +130,10 @@ func (ctx *context) lookupRoles() {
 }
 
 func (ctx *context) downloadRole(role model.Role) {
-	destFilePath := path.Join(ctx.rolesPath, ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
+	destFilePath := path.Join(ctx.RolesPath(), ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
 
 	role.Progressf("downloading role from %s", role.Url)
-	destFilePath, err := ctx.restClient.DownloadUrl(role.Url, destFilePath)
+	destFilePath, err := ctx.RestClient().DownloadUrl(role.Url, destFilePath)
 	if err != nil {
 		role.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
 		ctx.gitHubDownloadSemaphore.Release()
@@ -140,7 +156,7 @@ func (ctx *context) downloadRoles() {
 }
 
 func (ctx *context) untarRole(role model.Role) {
-	destDirPath := path.Join(ctx.rolesPath, role.Name)
+	destDirPath := path.Join(ctx.RolesPath(), role.Name)
 
 	role.Progressf("extracting %s to %s", role.Name, destDirPath)
 
@@ -165,7 +181,7 @@ func (ctx *context) untarRoles() {
 	}
 }
 
-func (ctx *context) isDuplicateRole(roleName string) bool {
+func (ctx *context) IsDuplicateRole(roleName string) bool {
 	for _, name := range ctx.roleNames {
 		if name == roleName {
 			return true
@@ -174,7 +190,7 @@ func (ctx *context) isDuplicateRole(roleName string) bool {
 	return false
 }
 
-func (ctx *context) installRole(fileRole rolesfile.Role) {
+func (ctx *context) InstallRole(fileRole rolesfile.Role) {
 	if fileRole.Name == "" {
 		fileRole.Name = repoUrlToRoleName(fileRole.Src)
 	}
@@ -195,7 +211,7 @@ func (ctx *context) installRole(fileRole rolesfile.Role) {
 }
 
 func (ctx *context) parseDependenciesForRole(role model.Role) {
-	metadataPath := path.Join(ctx.rolesPath, role.Name, "meta", "main.yml")
+	metadataPath := path.Join(ctx.RolesPath(), role.Name, "meta", "main.yml")
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 		// no metadata = no dependencies
 		ctx.parseDependenciesSemaphore.Release()
@@ -213,11 +229,11 @@ func (ctx *context) parseDependenciesForRole(role model.Role) {
 
 	for _, dependency := range roleMetadata.Dependencies {
 		if dependency.Name == "" {
-			dependency.Name = repoUrlToRoleName(dependency.Src)
+			dependency.Name = ctx.RepoUrlToRoleName(dependency.Src)
 		}
 		// We don't want role dependencies overwriting the versions of the roles
 		// explicitly specified in the roles file.
-		if ctx.isDuplicateRole(dependency.Name) {
+		if ctx.IsDuplicateRole(dependency.Name) {
 			continue
 		}
 
@@ -225,7 +241,7 @@ func (ctx *context) parseDependenciesForRole(role model.Role) {
 
 		ctx.roleLatch.TaskAdded()
 
-		ctx.installRole(rolesfile.Role{
+		ctx.InstallRole(rolesfile.Role{
 			Src:     dependency.Src,
 			Name:    dependency.Name,
 			Version: dependency.Version,
@@ -304,7 +320,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 	go ctx.parseDependenciesForRoles()
 
 	for _, fileRole := range roles {
-		ctx.installRole(fileRole)
+		ctx.InstallRole(fileRole)
 	}
 
 	success := ctx.roleLatch.Await()
