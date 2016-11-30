@@ -1,17 +1,15 @@
 package roleinstaller
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path"
 	"strings"
-	"time"
 
 	"github.com/gantsign/alt-galaxy/internal/application"
-	"github.com/gantsign/alt-galaxy/internal/message"
+	"github.com/gantsign/alt-galaxy/internal/logging"
 	"github.com/gantsign/alt-galaxy/internal/metadata"
 	"github.com/gantsign/alt-galaxy/internal/restapi"
 	"github.com/gantsign/alt-galaxy/internal/restclient"
@@ -34,7 +32,7 @@ type additionalRoleFields struct {
 
 type installerRole struct {
 	rolesfile.Role
-	roleLog
+	logging.SerialLogger
 	additionalRoleFields
 }
 
@@ -44,7 +42,7 @@ type roleInstaller struct {
 	roleDownloadQueue          chan installerRole
 	roleUntarQueue             chan installerRole
 	roleParseDependenciesQueue chan installerRole
-	roleOutputBuffers          chan chan message.Message
+	roleLoggers                chan logging.SerialLogger
 	restClient                 restclient.RestClient
 	restApi                    restapi.RestApi
 	galaxyRequestSemaphore     util.Semaphore
@@ -78,47 +76,21 @@ func repoUrlToRoleName(repoUrl string) string {
 }
 
 func (installer *roleInstaller) printOutput() {
-	stdOut := bufio.NewWriter(os.Stdout)
-	stdErr := bufio.NewWriter(os.Stderr)
-	for output := range installer.roleOutputBuffers {
-		for msg := range output {
-			switch msg.MessageType {
-			case message.OutMsg:
-				fmt.Fprintln(stdOut, "- ", msg.Body)
-				stdOut.Flush()
-			case message.ErrorMsg:
-				// A short sleep helps the stdout and stderr render in the correct order
-				time.Sleep(time.Second)
-
-				fmt.Fprintln(stdErr, "ERROR! ", msg.Body)
-				stdErr.Flush()
-
-				// A short sleep helps the stdout and stderr render in the correct order
-				time.Sleep(time.Second)
-			default:
-				// A short sleep helps the stdout and stderr render in the correct order
-				time.Sleep(time.Second)
-
-				fmt.Fprintln(stdErr, fmt.Sprintf("ERROR! Unsupported MessageType: %d", msg.MessageType))
-				stdErr.Flush()
-
-				// A short sleep helps the stdout and stderr render in the correct order
-				time.Sleep(time.Second)
-			}
-		}
+	for logger := range installer.roleLoggers {
+		logger.PrintOutput()
 	}
 	installer.loggingLatch.Success()
 }
 
 func (installer *roleInstaller) fail(role installerRole) {
 	role.Progressf("%s install failed", role.Name)
-	role.close()
+	role.Close()
 	installer.roleLatch.Failure()
 }
 
 func (installer *roleInstaller) success(role installerRole) {
 	role.Progressf("%s was installed successfully", role.Name)
-	role.close()
+	role.Close()
 	installer.roleLatch.Success()
 }
 
@@ -225,10 +197,11 @@ func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
 		fileRole.Name = repoUrlToRoleName(fileRole.Src)
 	}
 
-	outputBuffer := make(chan message.Message, 20)
-	installer.roleOutputBuffers <- outputBuffer
+	logger := logging.NewSerialLogger()
 
-	role := installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
+	installer.roleLoggers <- logger
+
+	role := installerRole{fileRole, logger, additionalRoleFields{}}
 
 	if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 		role.Url = role.Src
@@ -336,7 +309,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 		roleParseDependenciesQueue: make(chan installerRole, queueSize),
 		roleLatch:                  util.NewCompletionLatch(len(roles)),
 		loggingLatch:               util.NewCompletionLatch(1),
-		roleOutputBuffers:          make(chan chan message.Message, queueSize),
+		roleLoggers:                make(chan logging.SerialLogger, queueSize),
 		galaxyRequestSemaphore:     util.NewSemaphore(maxConcurrentGalaxyRequests),
 		gitHubDownloadSemaphore:    util.NewSemaphore(maxConcurrentGitHubDownloads),
 		untarSemaphore:             util.NewSemaphore(maxConcurrentUntar),
@@ -356,7 +329,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 
 	success := installer.roleLatch.Await()
 
-	close(installer.roleOutputBuffers)
+	close(installer.roleLoggers)
 	installer.loggingLatch.Await()
 
 	if !success {
