@@ -8,19 +8,17 @@ import (
 	"github.com/gantsign/alt-galaxy/internal/roleinstaller/internal/pipeline"
 )
 
-func downloadRole(ctx model.Context, step pipeline.Step, role model.Role) {
+func downloadRole(ctx model.Context, role model.Role) (model.Role, error) {
 	destFilePath := path.Join(ctx.RolesPath(), ".downloads", fmt.Sprint(role.Name, ".tar.gz"))
 
 	role.Progressf("downloading role from %s", role.Url)
 	destFilePath, err := ctx.RestClient().DownloadUrl(role.Url, destFilePath)
 	if err != nil {
-		role.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
-		step.Fail(role)
-		return
+		return role, fmt.Errorf("Failed to download URL [%s].\nCaused by: %s", role.Url, err)
 	}
 	role.ArchivePath = destFilePath
 
-	step.Success(role)
+	return role, nil
 }
 
 func NewDownloadRole(maxConcurrent int) pipeline.Step {

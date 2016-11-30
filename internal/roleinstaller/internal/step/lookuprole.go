@@ -11,28 +11,20 @@ import (
 
 type lookupRole struct {
 	pipeline.StepBase
-	semaphore util.Semaphore
 }
 
-func (step *lookupRole) lookupRole(ctx model.Context, role model.Role) {
+func lookupRoleDetails(ctx model.Context, role model.Role) (model.Role, error) {
 	roleName, err := role.ParseRoleName()
 	if err != nil {
-		role.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
-		step.semaphore.Release()
-		step.Fail(role)
-		return
+		return role, fmt.Errorf("Failed building query for role [%s].\nCaused by: %s", role.Name, err)
 	}
 
 	role.Progressf("downloading role '%s', owned by %s", roleName.RoleNamePart, roleName.UsernamePart)
 
 	roleQueryResponse, err := ctx.RestApi().QueryRolesByName(roleName)
 	if err != nil {
-		role.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
-		step.semaphore.Release()
-		step.Fail(role)
-		return
+		return role, fmt.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
 	}
-	step.semaphore.Release()
 
 	roleDetails := roleQueryResponse.Results[0]
 	if role.Version == "" {
@@ -40,7 +32,7 @@ func (step *lookupRole) lookupRole(ctx model.Context, role model.Role) {
 	}
 	role.Url = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz", roleDetails.GitHubUser, roleDetails.GitHubRepo, role.Version)
 
-	step.Success(role)
+	return role, nil
 }
 
 func (step *lookupRole) processRoles() {
@@ -66,9 +58,7 @@ func (step *lookupRole) processRoles() {
 	}()
 
 	for role := range roleLookupQueue {
-		step.semaphore.Acquire()
-
-		go step.lookupRole(ctx, role)
+		step.ConcurrentlyProcessRole(role, lookupRoleDetails)
 	}
 }
 
@@ -78,6 +68,8 @@ func (step *lookupRole) Start() {
 
 func NewLookupRole(maxConcurrent int) pipeline.Step {
 	return &lookupRole{
-		semaphore: util.NewSemaphore(maxConcurrent),
+		StepBase: pipeline.StepBase{
+			Semaphore: util.NewSemaphore(maxConcurrent),
+		},
 	}
 }
