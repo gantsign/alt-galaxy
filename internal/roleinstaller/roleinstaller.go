@@ -42,7 +42,7 @@ type roleInstaller struct {
 	roleDownloadQueue          chan installerRole
 	roleUntarQueue             chan installerRole
 	roleParseDependenciesQueue chan installerRole
-	roleLoggers                chan logging.SerialLogger
+	loggerFactory              logging.SerialLoggerFactory
 	restClient                 restclient.RestClient
 	restApi                    restapi.RestApi
 	galaxyRequestSemaphore     util.Semaphore
@@ -50,7 +50,6 @@ type roleInstaller struct {
 	untarSemaphore             util.Semaphore
 	parseDependenciesSemaphore util.Semaphore
 	roleLatch                  util.CompletionLatch
-	loggingLatch               util.CompletionLatch
 	roleNames                  []string
 }
 
@@ -73,13 +72,6 @@ func repoUrlToRoleName(repoUrl string) string {
 		trailingPath = strings.Split(trailingPath, ",")[0]
 	}
 	return trailingPath
-}
-
-func (installer *roleInstaller) printOutput() {
-	for logger := range installer.roleLoggers {
-		logger.PrintOutput()
-	}
-	installer.loggingLatch.Success()
 }
 
 func (installer *roleInstaller) fail(role installerRole) {
@@ -197,9 +189,7 @@ func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
 		fileRole.Name = repoUrlToRoleName(fileRole.Src)
 	}
 
-	logger := logging.NewSerialLogger()
-
-	installer.roleLoggers <- logger
+	logger := installer.loggerFactory.NewLogger()
 
 	role := installerRole{fileRole, logger, additionalRoleFields{}}
 
@@ -308,8 +298,7 @@ func (cmd RoleInstallerCmd) Execute() error {
 		roleUntarQueue:             make(chan installerRole, queueSize),
 		roleParseDependenciesQueue: make(chan installerRole, queueSize),
 		roleLatch:                  util.NewCompletionLatch(len(roles)),
-		loggingLatch:               util.NewCompletionLatch(1),
-		roleLoggers:                make(chan logging.SerialLogger, queueSize),
+		loggerFactory:              logging.NewSerialLoggerFactory(queueSize),
 		galaxyRequestSemaphore:     util.NewSemaphore(maxConcurrentGalaxyRequests),
 		gitHubDownloadSemaphore:    util.NewSemaphore(maxConcurrentGitHubDownloads),
 		untarSemaphore:             util.NewSemaphore(maxConcurrentUntar),
@@ -317,7 +306,8 @@ func (cmd RoleInstallerCmd) Execute() error {
 		roleNames:                  roleNames,
 	}
 
-	go installer.printOutput()
+	installer.loggerFactory.StartOutput()
+
 	go installer.lookupRoles()
 	go installer.downloadRoles()
 	go installer.untarRoles()
@@ -329,8 +319,8 @@ func (cmd RoleInstallerCmd) Execute() error {
 
 	success := installer.roleLatch.Await()
 
-	close(installer.roleLoggers)
-	installer.loggingLatch.Await()
+	installer.loggerFactory.Close()
+	installer.loggerFactory.AwaitOutputComplete()
 
 	if !success {
 		return errors.New("Failed to complete successfully. Any error output should be visible above. Please fix these errors and try again.")
