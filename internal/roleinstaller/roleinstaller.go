@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gantsign/alt-galaxy/internal/application"
+	"github.com/gantsign/alt-galaxy/internal/logging"
 	"github.com/gantsign/alt-galaxy/internal/message"
 	"github.com/gantsign/alt-galaxy/internal/metadata"
 	"github.com/gantsign/alt-galaxy/internal/restapi"
@@ -34,7 +35,7 @@ type additionalRoleFields struct {
 
 type installerRole struct {
 	rolesfile.Role
-	roleLog
+	logging.SerialLogger
 	additionalRoleFields
 }
 
@@ -112,13 +113,13 @@ func (installer *roleInstaller) printOutput() {
 
 func (installer *roleInstaller) fail(role installerRole) {
 	role.Progressf("%s install failed", role.Name)
-	role.close()
+	role.Close()
 	installer.roleLatch.Failure()
 }
 
 func (installer *roleInstaller) success(role installerRole) {
 	role.Progressf("%s was installed successfully", role.Name)
-	role.close()
+	role.Close()
 	installer.roleLatch.Success()
 }
 
@@ -228,7 +229,9 @@ func (installer *roleInstaller) addRole(fileRole rolesfile.Role) {
 	outputBuffer := make(chan message.Message, 20)
 	installer.roleOutputBuffers <- outputBuffer
 
-	role := installerRole{fileRole, roleLog{outputBuffer}, additionalRoleFields{}}
+	logger := logging.NewSerialLogger(outputBuffer)
+
+	role := installerRole{fileRole, logger, additionalRoleFields{}}
 
 	if strings.HasPrefix(role.Src, "http://") || strings.HasPrefix(role.Src, "https://") {
 		role.Url = role.Src

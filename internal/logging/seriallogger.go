@@ -1,4 +1,4 @@
-package roleinstaller
+package logging
 
 import (
 	"fmt"
@@ -6,26 +6,30 @@ import (
 	"github.com/gantsign/alt-galaxy/internal/message"
 )
 
-type roleLog struct {
+type SerialLogger struct {
 	outputBuffer chan message.Message
 }
 
-func (roleLog roleLog) Progressf(format string, a ...interface{}) {
+func (logger SerialLogger) Progressf(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	roleLog.outputBuffer <- message.Message{
+	logger.outputBuffer <- message.Message{
 		MessageType: message.OutMsg,
 		Body:        msg,
 	}
 }
 
-func (roleLog roleLog) Errorf(format string, a ...interface{}) {
+func (logger SerialLogger) Errorf(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	roleLog.outputBuffer <- message.Message{
+	logger.outputBuffer <- message.Message{
 		MessageType: message.ErrorMsg,
 		Body:        msg,
 	}
 }
 
-func (roleLog roleLog) close() {
-	close(roleLog.outputBuffer)
+func (logger SerialLogger) Close() {
+	close(logger.outputBuffer)
+}
+
+func NewSerialLogger(outputBuffer chan message.Message) SerialLogger {
+	return SerialLogger{outputBuffer}
 }
