@@ -43,7 +43,7 @@ func (logger SerialLogger) Close() {
 	close(logger.outputBuffer)
 }
 
-func (logger SerialLogger) PrintOutput() {
+func (logger SerialLogger) printOutput() {
 	stdOut := bufio.NewWriter(os.Stdout)
 	stdErr := bufio.NewWriter(os.Stderr)
 	for msg := range logger.outputBuffer {
@@ -70,11 +70,5 @@ func (logger SerialLogger) PrintOutput() {
 			// A short sleep helps the stdout and stderr render in the correct order
 			time.Sleep(time.Second)
 		}
-	}
-}
-
-func NewSerialLogger() SerialLogger {
-	return SerialLogger{
-		outputBuffer: make(chan message, 20),
 	}
 }
