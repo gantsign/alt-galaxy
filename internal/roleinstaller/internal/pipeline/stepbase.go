@@ -2,12 +2,16 @@ package pipeline
 
 import (
 	"github.com/gantsign/alt-galaxy/internal/roleinstaller/internal/model"
+	"github.com/gantsign/alt-galaxy/internal/util"
 )
+
+type ProcessRole func(ctx model.Context, role model.Role) (model.Role, error)
 
 type StepBase struct {
 	ctx        model.Context
 	pipeline   Pipeline
 	RoleQueue  chan model.Role
+	Semaphore  util.Semaphore
 	onComplete OnComplete
 }
 
@@ -32,4 +36,20 @@ func (step *StepBase) Fail(role model.Role) {
 
 func (step *StepBase) Success(role model.Role) {
 	step.onComplete(role)
+}
+
+func (step *StepBase) ConcurrentlyProcessRole(role model.Role, processor ProcessRole) {
+	ctx := step.Context()
+	step.Semaphore.Acquire()
+
+	go func() {
+		role, err := processor(ctx, role)
+		step.Semaphore.Release()
+		if err != nil {
+			role.Errorf(err.Error())
+			step.Fail(role)
+		} else {
+			step.Success(role)
+		}
+	}()
 }

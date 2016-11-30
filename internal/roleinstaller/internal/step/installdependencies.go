@@ -1,6 +1,7 @@
 package step
 
 import (
+	"fmt"
 	"os"
 	"path"
 
@@ -10,19 +11,16 @@ import (
 	"github.com/gantsign/alt-galaxy/internal/rolesfile"
 )
 
-func parseDependenciesForRole(ctx model.Context, step pipeline.Step, role model.Role) {
+func parseDependenciesForRole(ctx model.Context, role model.Role) (model.Role, error) {
 	metadataPath := path.Join(ctx.RolesPath(), role.Name, "meta", "main.yml")
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 		// no metadata = no dependencies
-		step.Success(role)
-		return
+		return role, nil
 	}
 
 	roleMetadata, err := metadata.ParseMetadataFile(metadataPath)
 	if err != nil {
-		role.Errorf("Failed to read role metadata [%s].\nCaused by: %s", metadataPath, err)
-		step.Fail(role)
-		return
+		return role, fmt.Errorf("Failed to read role metadata [%s].\nCaused by: %s", metadataPath, err)
 	}
 
 	for _, dependency := range roleMetadata.Dependencies {
@@ -44,7 +42,7 @@ func parseDependenciesForRole(ctx model.Context, step pipeline.Step, role model.
 		})
 	}
 
-	step.Success(role)
+	return role, nil
 }
 
 func NewInstallDependencies(maxConcurrent int) pipeline.Step {
