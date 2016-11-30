@@ -5,27 +5,37 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/gantsign/alt-galaxy/internal/message"
 )
 
+const (
+	outMsg   messageType = iota
+	errorMsg messageType = iota
+)
+
+type messageType int
+
+type message struct {
+	messageType messageType
+	body        string
+}
+
 type SerialLogger struct {
-	outputBuffer chan message.Message
+	outputBuffer chan message
 }
 
 func (logger SerialLogger) Progressf(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	logger.outputBuffer <- message.Message{
-		MessageType: message.OutMsg,
-		Body:        msg,
+	logger.outputBuffer <- message{
+		messageType: outMsg,
+		body:        msg,
 	}
 }
 
 func (logger SerialLogger) Errorf(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	logger.outputBuffer <- message.Message{
-		MessageType: message.ErrorMsg,
-		Body:        msg,
+	logger.outputBuffer <- message{
+		messageType: errorMsg,
+		body:        msg,
 	}
 }
 
@@ -37,15 +47,15 @@ func (logger SerialLogger) PrintOutput() {
 	stdOut := bufio.NewWriter(os.Stdout)
 	stdErr := bufio.NewWriter(os.Stderr)
 	for msg := range logger.outputBuffer {
-		switch msg.MessageType {
-		case message.OutMsg:
-			fmt.Fprintln(stdOut, "- ", msg.Body)
+		switch msg.messageType {
+		case outMsg:
+			fmt.Fprintln(stdOut, "- ", msg.body)
 			stdOut.Flush()
-		case message.ErrorMsg:
+		case errorMsg:
 			// A short sleep helps the stdout and stderr render in the correct order
 			time.Sleep(time.Second)
 
-			fmt.Fprintln(stdErr, "ERROR! ", msg.Body)
+			fmt.Fprintln(stdErr, "ERROR! ", msg.body)
 			stdErr.Flush()
 
 			// A short sleep helps the stdout and stderr render in the correct order
@@ -54,7 +64,7 @@ func (logger SerialLogger) PrintOutput() {
 			// A short sleep helps the stdout and stderr render in the correct order
 			time.Sleep(time.Second)
 
-			fmt.Fprintln(stdErr, fmt.Sprintf("ERROR! Unsupported MessageType: %d", msg.MessageType))
+			fmt.Fprintln(stdErr, fmt.Sprintf("ERROR! Unsupported MessageType: %d", msg.messageType))
 			stdErr.Flush()
 
 			// A short sleep helps the stdout and stderr render in the correct order
@@ -65,6 +75,6 @@ func (logger SerialLogger) PrintOutput() {
 
 func NewSerialLogger() SerialLogger {
 	return SerialLogger{
-		outputBuffer: make(chan message.Message, 20),
+		outputBuffer: make(chan message, 20),
 	}
 }
