@@ -305,8 +305,8 @@ func (cmd RoleInstallerCmd) Execute() error {
 
 	roleNames := make([]string, len(roles))
 	for index := range roles {
-		if !strings.Contains(roles[index].Src, "://") {
-			roles[index].Name = roles[index].Src
+		if roles[index].Name == "" {
+			roles[index].Name = repoUrlToRoleName(roles[index].Src)
 		}
 		roleNames[index] = roles[index].Name
 	}
