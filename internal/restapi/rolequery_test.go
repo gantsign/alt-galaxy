@@ -213,6 +213,87 @@ func TestLatestVersionWithoutPrefix(t *testing.T) {
 	}
 }
 
+func TestLatestVersionWithPrefix(t *testing.T) {
+	roleQueryResponse, err := parseRoleQueryResponseString(`{
+		"results": [
+			{
+				"summary_fields": {
+					"versions": [
+						{
+							"release_date": "2016-09-19T10:07:03Z",
+							"name": "v2.0.1",
+							"id": 19123
+						},
+						{
+							"release_date": "2016-08-26T13:06:41Z",
+							"name": "v2.0.0",
+							"id": 18132
+						},
+						{
+							"release_date": "2016-08-23T10:20:49Z",
+							"name": "v1.2.1",
+							"id": 18050
+						},
+						{
+							"release_date": "2016-08-15T13:15:08Z",
+							"name": "v1.2.0",
+							"id": 17796
+						},
+						{
+							"release_date": "2016-08-15T12:39:53Z",
+							"name": "v1.1.0",
+							"id": 17794
+						},
+						{
+							"release_date": "2016-04-20T20:04:01Z",
+							"name": "v1.0.3",
+							"id": 17795
+						},
+						{
+							"release_date": "2016-04-20T17:46:07Z",
+							"name": "v1.0.2",
+							"id": 18051
+						},
+						{
+							"release_date": "2016-04-15T13:39:51Z",
+							"name": "v1.0.1",
+							"id": 13117
+						},
+						{
+							"release_date": "2016-04-15T13:14:31Z",
+							"name": "v1.0.0",
+							"id": 13116
+						},
+						{
+							"release_date": "2016-08-23T14:20:49Z",
+							"name": "1.2.1",
+							"id": 18045
+						},
+						{
+							"release_date": "2016-04-20T21:46:07Z",
+							"name": "1.0.2",
+							"id": 13349
+						}
+					]
+				}
+			}
+		]
+	}`)
+	if err != nil {
+		t.Errorf("Error parsing bad YAML: %+v", err)
+		return
+	}
+
+	expectedVersion := "v2.0.1"
+
+	roleDetails := roleQueryResponse.Results[0]
+	actualVersion := roleDetails.LatestVersion()
+
+	if expectedVersion != actualVersion {
+		t.Errorf("Expected [%s] != actual [%s]", expectedVersion, actualVersion)
+	}
+}
+
 func TestLatestVersionEmpty(t *testing.T) {
 
 	roleQueryResponse, err := parseRoleQueryResponseString(`{
