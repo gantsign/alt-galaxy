@@ -35,14 +35,17 @@ func ParseRoleQueryResponse(bytes []byte) (RoleQueryResponse, error) {
 	return response, err
 }
 
-func (result RoleQueryResult) LatestVersion() string {
+func (result RoleQueryResult) LatestVersion() (string, error) {
 	versions := result.SummaryFields.Versions
 	if len(versions) == 0 {
-		return "master"
+		return "master", nil
 	}
 	libVersions := make([]*version.Version, len(versions))
 	for i, rawVersion := range versions {
-		ver, _ := version.NewVersion(rawVersion.Name)
+		ver, err := version.NewVersion(rawVersion.Name)
+		if err != nil {
+			return "", err
+		}
 		libVersions[i] = ver
 	}
 
@@ -52,11 +55,11 @@ func (result RoleQueryResult) LatestVersion() string {
 	// The version library strips the 'v' prefix; return the version with the 'v' prefix if present.
 	for _, rawVersion := range versions {
 		if rawVersion.Name == ("v" + latestVersion) {
-			return rawVersion.Name
+			return rawVersion.Name, nil
 		}
 	}
 
-	return latestVersion
+	return latestVersion, nil
 }
 
 func (restApi restApiImpl) QueryRolesByName(roleName rolesfile.RoleName) (RoleQueryResponse, error) {

@@ -28,7 +28,10 @@ func lookupRoleDetails(ctx model.Context, role model.Role) (model.Role, error) {
 
 	roleDetails := roleQueryResponse.Results[0]
 	if role.Version == "" {
-		role.Version = roleDetails.LatestVersion()
+		role.Version, err = roleDetails.LatestVersion()
+		if err != nil {
+			return role, fmt.Errorf("Failed to determine latest version for role [%s].\nCaused by: %s", role.Name, err)
+		}
 	}
 	role.Url = fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz", roleDetails.GitHubUser, roleDetails.GitHubRepo, role.Version)
 
