@@ -206,7 +206,12 @@ func TestLatestVersionWithoutPrefix(t *testing.T) {
 	expectedVersion := "1.1.3"
 
 	roleDetails := roleQueryResponse.Results[0]
-	actualVersion := roleDetails.LatestVersion()
+
+	actualVersion, err := roleDetails.LatestVersion()
+	if err != nil {
+		t.Errorf("Error obtaining latest version: %+v", err)
+		return
+	}
 
 	if expectedVersion != actualVersion {
 		t.Errorf("Expected [%s] != actual [%s]", expectedVersion, actualVersion)
@@ -287,7 +292,12 @@ func TestLatestVersionWithPrefix(t *testing.T) {
 	expectedVersion := "v2.0.1"
 
 	roleDetails := roleQueryResponse.Results[0]
-	actualVersion := roleDetails.LatestVersion()
+
+	actualVersion, err := roleDetails.LatestVersion()
+	if err != nil {
+		t.Errorf("Error obtaining latest version: %+v", err)
+		return
+	}
 
 	if expectedVersion != actualVersion {
 		t.Errorf("Expected [%s] != actual [%s]", expectedVersion, actualVersion)
@@ -313,7 +323,12 @@ func TestLatestVersionEmpty(t *testing.T) {
 	expectedVersion := "master"
 
 	roleDetails := roleQueryResponse.Results[0]
-	actualVersion := roleDetails.LatestVersion()
+
+	actualVersion, err := roleDetails.LatestVersion()
+	if err != nil {
+		t.Errorf("Error obtaining latest version: %+v", err)
+		return
+	}
 
 	if expectedVersion != actualVersion {
 		t.Errorf("Expected [%s] != actual [%s]", expectedVersion, actualVersion)
