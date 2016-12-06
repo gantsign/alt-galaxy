@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -50,16 +51,19 @@ func (result RoleQueryResult) LatestVersion() (string, error) {
 	}
 
 	sort.Sort(version.Collection(libVersions))
-	latestVersion := libVersions[len(libVersions)-1].String()
+	latestVersion := libVersions[len(libVersions)-1]
 
-	// The version library strips the 'v' prefix; return the version with the 'v' prefix if present.
+	// The version library normalizes the version string (e.g. removing the 'v'
+	// prefix and adding '.0's); loop through and return the raw version string.
 	for _, rawVersion := range versions {
-		if rawVersion.Name == ("v" + latestVersion) {
+		ver, _ := version.NewVersion(rawVersion.Name)
+		if latestVersion.Equal(ver) {
 			return rawVersion.Name, nil
 		}
 	}
 
-	return latestVersion, nil
+	// Should be unreachable
+	return "", errors.New("Unable to find matching version")
 }
 
 func (restApi restApiImpl) QueryRolesByName(roleName rolesfile.RoleName) (RoleQueryResponse, error) {

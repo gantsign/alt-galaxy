@@ -304,6 +304,102 @@ func TestLatestVersionWithPrefix(t *testing.T) {
 	}
 }
 
+func TestLatestVersionWithoutPatchVersion(t *testing.T) {
+	roleQueryResponse, err := parseRoleQueryResponseString(`{
+		"results": [
+			{
+				"summary_fields": {
+					"versions": [
+						{
+							"release_date": "2016-10-04T00:21:35Z",
+							"name": "v2.0",
+							"id": 19828
+						},
+						{
+							"release_date": "2016-08-29T02:50:21Z",
+							"name": "v1.1.9",
+							"id": 18255
+						},
+						{
+							"release_date": "2016-06-14T22:25:23Z",
+							"name": "v1.1.8",
+							"id": 15516
+						},
+						{
+							"release_date": "2016-06-09T08:15:07Z",
+							"name": "v1.1.7",
+							"id": 15314
+						},
+						{
+							"release_date": "2016-05-02T04:37:18Z",
+							"name": "v1.1.6",
+							"id": 13720
+						},
+						{
+							"release_date": "2016-08-30T19:34:37Z",
+							"name": "v1.1.10",
+							"id": 18322
+						},
+						{
+							"release_date": "2015-12-05T06:40:55Z",
+							"name": "v1.1.1",
+							"id": 8406
+						},
+						{
+							"release_date": "2015-11-20T06:01:34Z",
+							"name": "v1.1",
+							"id": 8407
+						},
+						{
+							"release_date": "2015-09-21T19:19:08Z",
+							"name": "v1.0",
+							"id": 7145
+						},
+						{
+							"release_date": "2016-04-05T01:30:24Z",
+							"name": "1.1.5",
+							"id": 13108
+						},
+						{
+							"release_date": "2016-04-03T07:37:12Z",
+							"name": "1.1.4",
+							"id": 12703
+						},
+						{
+							"release_date": "2016-03-30T06:34:53Z",
+							"name": "1.1.3",
+							"id": 12591
+						},
+						{
+							"release_date": "2016-03-17T22:28:00Z",
+							"name": "1.1.2",
+							"id": 12179
+						}
+					]
+				}
+			}
+		]
+	}`)
+	if err != nil {
+		t.Errorf("Error parsing bad YAML: %+v", err)
+		return
+	}
+
+	expectedVersion := "v2.0"
+
+	roleDetails := roleQueryResponse.Results[0]
+
+	actualVersion, err := roleDetails.LatestVersion()
+	if err != nil {
+		t.Errorf("Error obtaining latest version: %+v", err)
+		return
+	}
+
+	if expectedVersion != actualVersion {
+		t.Errorf("Expected [%s] != actual [%s]", expectedVersion, actualVersion)
+	}
+}
+
 func TestLatestVersionEmpty(t *testing.T) {
 
 	roleQueryResponse, err := parseRoleQueryResponseString(`{
