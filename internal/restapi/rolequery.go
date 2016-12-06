@@ -47,7 +47,16 @@ func (result RoleQueryResult) LatestVersion() string {
 	}
 
 	sort.Sort(version.Collection(libVersions))
-	return libVersions[len(libVersions)-1].String()
+	latestVersion := libVersions[len(libVersions)-1].String()
+
+	// The version library strips the 'v' prefix; return the version with the 'v' prefix if present.
+	for _, rawVersion := range versions {
+		if rawVersion.Name == ("v" + latestVersion) {
+			return rawVersion.Name
+		}
+	}
+
+	return latestVersion
 }
 
 func (restApi restApiImpl) QueryRolesByName(roleName rolesfile.RoleName) (RoleQueryResponse, error) {
