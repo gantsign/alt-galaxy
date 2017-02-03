@@ -8,7 +8,7 @@ echo '# Running tests #'
 echo '#################'
 echo
 
-go test ./...
+./go.test.sh
 
 echo
 echo '#####################'
