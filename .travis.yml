@@ -6,13 +6,14 @@ go:
 addons:
   apt:
     packages:
+      - curl
       - p7zip-full
 
 install:
-  # Install godep
-  - go get github.com/tools/godep
-  # Intall project dependencies using godep
-  - godep restore
+  # Install dep
+  - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+  # Intall project dependencies using dep
+  - dep ensure -v
   # Install gox cross compile tool
   - go get github.com/mitchellh/gox
 
