@@ -16,12 +16,19 @@ install:
   - dep ensure -v
   # Install gox cross compile tool
   - go get github.com/mitchellh/gox
+  # Install Node.js and NPM (reequired by snyk)
+  - curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+  - sudo apt-get install -y nodejs
+  # Install snky
+  - sudo npm install -g snyk
 
 script:
   - .travis/build.sh
+  - snyk test
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)
+  - snyk monitor --org=gantsign --project-name=alt-galaxy
 
 branches:
   only:
@@ -47,3 +54,5 @@ env:
   global:
     - OS_TARGETS="linux darwin windows"
     - ARCH_TARGETS="386 amd64"
+    # snky token
+    - secure: 0q1S1KMgq+i63sFmiEjqwICZ/nfjlpKVb535uGIqwcVXqlT7yW/If6vOw7YsijWoLP50RMeIy6Ur8ecPwXT04BjaO8h+Z3f9mAVlsB44EeUrkGc9yFkaQZvDeMyTWtLnPka3CDC2OKSsZzSu/mn6I1iyxZmOo/Divpql8Imi3I5RxQDae3kMP0maeUArYq54um3fFsiZm4u5RNojnPNojFP/e9pNFHMa1gyV1YrpvxGMUDQezoPq3gcalnc84/g4xKkn521SdaKj5Qz0i2Kvf7gUAUPg9uxR/s1FNKwdM7bPrvkdyg9APGEsdHwIbpOyVAD2J7hinhN1ahSqWnLz/DtxAyNsAXdXyFVwDP6fXQCB25coODDRRfsZkGu8veLelraFLhrLCY0gM1vn+ecNZD9EhtRJCvqEcKSZk17dbT76EwIDc+VJAE8kbfYnt3VK1LR1MSX/+b7AeLXvUaN1QJmOfECwbI0ZDsQd3WBMcgGjz7BQ3RZysv7Zh7vgtOBfOY7gXTzlOIKovevkaJODAEFOQgJomFnKnkBXooLaF2HJ7GjLD3J9VkowshP4nAmS4n07E5Y08o4g7UamJryGC0yyuEp4NphV+uKFhNFdbaKDgF1dOncWAGv7sI6H06y8u7pgNsLGF8GyqRPaKrOPuwTNuhbAqdsbTNfS5l8CwJM=
