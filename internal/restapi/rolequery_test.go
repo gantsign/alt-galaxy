@@ -573,7 +573,7 @@ func TestQueryRolesByName(t *testing.T) {
 	actualResultCount := len(results)
 
 	if expectedResultCount != actualResultCount {
-		t.Errorf("Expected [%s] != actual [%s]", expectedResultCount, actualResultCount)
+		t.Errorf("Expected [%d] != actual [%d]", expectedResultCount, actualResultCount)
 	}
 }
 
