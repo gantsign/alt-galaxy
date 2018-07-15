@@ -26,6 +26,9 @@ func lookupRoleDetails(ctx model.Context, role model.Role) (model.Role, error) {
 		return role, fmt.Errorf("Failed querying details for role [%s].\nCaused by: %s", role.Name, err)
 	}
 
+	if len(roleQueryResponse.Results) == 0 {
+		return role, fmt.Errorf("Failed to determine latest version for role [%s] - role not found", role.Name)
+	}
 	roleDetails := roleQueryResponse.Results[0]
 	if role.Version == "" {
 		role.Version, err = roleDetails.LatestVersion()
