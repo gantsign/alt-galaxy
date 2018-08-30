@@ -1,8 +1,8 @@
 # Alt Galaxy
 
 [![Build Status](https://travis-ci.org/gantsign/alt-galaxy.svg?branch=master)](https://travis-ci.org/gantsign/alt-galaxy)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Github All Releases](https://img.shields.io/github/downloads/gantsign/alt-galaxy/total.svg)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 
 Alternate implementation of the
